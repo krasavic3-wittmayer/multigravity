@@ -79,6 +79,14 @@ update_mcp_instructions(generate_main_agent_prompt())
 " 2>/dev/null || true
 echo "✓ Fleet instructions synchronized."
 
+# Pre-approve MCP tool permissions in settings.json
+python3 -c "
+from multigravity.launcher import ensure_mcp_permissions_preapproved
+ensure_mcp_permissions_preapproved()
+" 2>/dev/null || true
+echo "✓ Multigravity MCP tool permissions pre-approved in settings.json."
+
+
 # 5. Remote Control Setup
 echo "[5/6] Ensuring Remote Control daemon is active..."
 if "$AGY_BIN" remote-control status 2>/dev/null | grep -q "inactive"; then

@@ -111,6 +111,28 @@ class TestLauncherAndFleetPrompt(unittest.TestCase):
             self.assertIn("remote-control", second_call_args)
             self.assertIn("start", second_call_args)
 
+    def test_ensure_mcp_permissions_preapproved(self):
+        import json
+        from multigravity.launcher import ensure_mcp_permissions_preapproved
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fake_home = Path(tmp_dir)
+            settings_dir = fake_home / ".gemini" / "antigravity-cli"
+            settings_dir.mkdir(parents=True)
+            settings_file = settings_dir / "settings.json"
+            settings_file.write_text(json.dumps({"permissions": {"allow": ["command(ls)"]}}))
+
+            ensure_mcp_permissions_preapproved(settings_file)
+
+            data = json.loads(settings_file.read_text())
+            allow = data["permissions"]["allow"]
+            self.assertIn("command(ls)", allow)
+            self.assertIn("mcp(multigravity/*)", allow)
+            self.assertIn("mcp(multigravity/submit_task)", allow)
+            self.assertIn("call_mcp_tool(multigravity/*)", allow)
+
+
 
 if __name__ == "__main__":
     unittest.main()
+

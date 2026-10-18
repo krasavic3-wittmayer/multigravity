@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import signal
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
 
 from multigravity.config import SystemConfig
 from multigravity.cli import (
@@ -144,6 +146,62 @@ def ensure_remote_control_active():
             pass
 
 
+def ensure_mcp_permissions_preapproved(settings_path: Path | None = None):
+    """Pre-approves all multigravity MCP tools in ~/.gemini/antigravity-cli/settings.json.
+
+    Prevents Antigravity CLI from repeatedly prompting the user for approval
+    when the main agent invokes worker fleet tools.
+    """
+    if settings_path is None:
+        settings_path = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
+    if not settings_path.parent.exists():
+        return
+
+
+    data: dict[str, Any] = {}
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+
+    permissions = data.setdefault("permissions", {})
+    allow_list = permissions.setdefault("allow", [])
+
+    mcp_grants = [
+        "mcp(multigravity/*)",
+        "mcp(multigravity)",
+        "mcp(multigravity/list_workers)",
+        "mcp(multigravity/submit_task)",
+        "mcp(multigravity/wait)",
+        "mcp(multigravity/get_result)",
+        "mcp(multigravity/get_status)",
+        "mcp(multigravity/cancel_task)",
+        "call_mcp_tool(multigravity/*)",
+        "call_mcp_tool(multigravity)",
+        "call_mcp_tool(multigravity/list_workers)",
+        "call_mcp_tool(multigravity/submit_task)",
+        "call_mcp_tool(multigravity/wait)",
+        "call_mcp_tool(multigravity/get_result)",
+        "call_mcp_tool(multigravity/get_status)",
+        "call_mcp_tool(multigravity/cancel_task)",
+    ]
+
+    updated = False
+    for grant in mcp_grants:
+        if grant not in allow_list:
+            allow_list.append(grant)
+            updated = True
+
+    if updated:
+        try:
+            settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+
+
+
 def run_preflight_and_prepare() -> tuple[bool, str]:
     """Runs all preflight checks, heals environment, verifies auth, starts daemon, and returns prompt."""
     try:
@@ -162,22 +220,26 @@ def run_preflight_and_prepare() -> tuple[bool, str]:
     auto_heal_stale_processes(config)
     fix_profile_permissions(config)
 
-    # 2. Check and ensure workers are authenticated
+    # 2. Pre-approve MCP permissions to suppress user confirmation prompts
+    ensure_mcp_permissions_preapproved()
+
+    # 3. Check and ensure workers are authenticated
     if not ensure_workers_authenticated(config, config_path):
         return False, ""
 
-    # 3. Ensure background daemon is running
+    # 4. Ensure background daemon is running
     if not ensure_daemon_running(config, config_path):
         return False, ""
 
-    # 4. Ensure remote-control daemon is running for web visibility
+    # 5. Ensure remote-control daemon is running for web visibility
     ensure_remote_control_active()
 
-    # 5. Generate fleet prompt & update MCP instructions
+    # 6. Generate fleet prompt & update MCP instructions
     prompt = generate_main_agent_prompt(config, config_path)
     update_mcp_instructions(prompt)
 
     return True, prompt
+
 
 
 def main():

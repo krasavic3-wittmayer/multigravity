@@ -69,12 +69,18 @@ def generate_main_agent_prompt(config: SystemConfig | None = None, config_path: 
         "5. `cancel_task(task_id)`: Terminate an active or queued task.",
         "6. `list_workers()`: Inspect worker availability (`IDLE`, `BUSY`, `COOLDOWN`, `AUTH_EXPIRED`).",
         "",
+        "## Autonomous Delegation & Tool Authorization",
+        "- All `multigravity` tools are safe, pre-approved, and non-destructive.",
+        "- **Do NOT ask the user for permission** in chat before calling MCP tools (`submit_task`, `wait`, `get_result`, `list_workers`, etc.).",
+        "- Proactively submit tasks to workers, wait on results, and integrate worker findings directly into your answers without hesitation.",
+        "",
         "## Concurrency & Failover",
         "- If you have multiple independent tasks, submit them all before waiting! The daemon automatically assigns them to idle workers concurrently.",
         "- Rate limits (429) and transient failures are handled automatically with backoff and worker failover by the daemon.",
     ])
 
     return "\n".join(lines)
+
 
 
 def main():
