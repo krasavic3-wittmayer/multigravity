@@ -1,0 +1,47 @@
+# multigravity configuration example
+
+[daemon]
+# Cooldown settings for rate limited workers (429 / RESOURCE_EXHAUSTED)
+cooldown_base_s = 5.0
+cooldown_cap_s = 300.0
+
+# Queue deadline: maximum time a task can wait in queue before failing with NO_WORKER_AVAILABLE
+queue_deadline_s = 60.0
+
+# Per-task execution timeout: maximum time allowed for a single worker attempt
+task_timeout_s = 120.0
+
+# Maximum retry attempts across workers before failing with TASK_FAILED
+max_attempts = 3
+
+# Default character cap for the compressed JSON result
+default_max_output_chars = 4000
+
+# Persistence & logging paths
+log_dir = "logs"
+journal_dir = "journals"
+
+# Unix domain socket path (defaults to $XDG_RUNTIME_DIR/multigravity.sock if empty)
+# socket_path = "/run/user/1000/multigravity.sock"
+
+# Worker configurations (Strict boundary: 1 to 3 background accounts; Account 1 is main agent)
+[[workers]]
+id = "worker-1"
+label = "Account 2 (Research & Docs)"
+profile_dir = "/home/michal/.multigravity/workers/worker-1"
+enabled = true
+concurrency = 1
+
+[[workers]]
+id = "worker-2"
+label = "Account 3 (Test Gen & Review)"
+profile_dir = "/home/michal/.multigravity/workers/worker-2"
+enabled = true
+concurrency = 1
+
+[[workers]]
+id = "worker-3"
+label = "Account 4 (General Background)"
+profile_dir = "/home/michal/.multigravity/workers/worker-3"
+enabled = true
+concurrency = 1

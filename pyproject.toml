@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multigravity"
+version = "0.1.0"
+description = "Lightweight local orchestration layer between an interactive main agent and background sub-agents on Google AI Pro accounts"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+multigravity-daemon = "multigravity.daemon:main"
+multigravity-mcp-shim = "multigravity.mcp_shim:main"

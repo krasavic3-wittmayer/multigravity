@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# multigravity-auth - Re-authenticate a worker profile interactively
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 <profile_dir_or_worker_name>"
+    echo "Example: $0 ~/.multigravity/workers/worker-1"
+    exit 1
+fi
+
+TARGET="$1"
+if [ ! -d "$TARGET" ]; then
+    # Try relative to default profiles directory
+    if [ -d "profiles/$TARGET" ]; then
+        TARGET="profiles/$TARGET"
+    elif [ -d "$HOME/.multigravity/workers/$TARGET" ]; then
+        TARGET="$HOME/.multigravity/workers/$TARGET"
+    else
+        echo "Creating worker profile directory at: $TARGET"
+        mkdir -p "$TARGET"/{home,config,data,cache,state,runtime}
+        chmod -R 0700 "$TARGET"
+    fi
+fi
+
+TARGET_DIR="$(cd "$TARGET" && pwd)"
+mkdir -p "$TARGET_DIR"/{home,config,data,cache,state,runtime}
+chmod -R 0700 "$TARGET_DIR"
+
+echo "=== Launching interactive authentication for worker profile ==="
+echo "Profile directory: $TARGET_DIR"
+echo "Follow the on-screen prompts. Once authenticated, exit with /quit or Ctrl+D Ctrl+D."
+echo "================================================================"
+
+env -i \
+    PATH="$PATH" \
+    TERM="${TERM:-xterm-256color}" \
+    USER="$USER" \
+    HOME="$TARGET_DIR/home" \
+    XDG_CONFIG_HOME="$TARGET_DIR/config" \
+    XDG_DATA_HOME="$TARGET_DIR/data" \
+    XDG_CACHE_HOME="$TARGET_DIR/cache" \
+    XDG_STATE_HOME="$TARGET_DIR/state" \
+    XDG_RUNTIME_DIR="$TARGET_DIR/runtime" \
+    /usr/sbin/agy
