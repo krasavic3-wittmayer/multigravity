@@ -132,6 +132,18 @@ def ensure_daemon_running(config: SystemConfig, config_path: Path) -> bool:
     return False
 
 
+def ensure_remote_control_active():
+    """Ensures agy remote-control daemon is running so sessions appear on antigravity.google.com."""
+    agy_bin = shutil.which("agy") or "/usr/sbin/agy"
+    if Path(agy_bin).exists():
+        try:
+            status = subprocess.run([agy_bin, "remote-control", "status"], capture_output=True, text=True, timeout=5)
+            if "inactive" in status.stdout:
+                subprocess.run([agy_bin, "remote-control", "start"], capture_output=True, text=True, timeout=10)
+        except Exception:
+            pass
+
+
 def run_preflight_and_prepare() -> tuple[bool, str]:
     """Runs all preflight checks, heals environment, verifies auth, starts daemon, and returns prompt."""
     try:
@@ -158,7 +170,10 @@ def run_preflight_and_prepare() -> tuple[bool, str]:
     if not ensure_daemon_running(config, config_path):
         return False, ""
 
-    # 4. Generate fleet prompt & update MCP instructions
+    # 4. Ensure remote-control daemon is running for web visibility
+    ensure_remote_control_active()
+
+    # 5. Generate fleet prompt & update MCP instructions
     prompt = generate_main_agent_prompt(config, config_path)
     update_mcp_instructions(prompt)
 

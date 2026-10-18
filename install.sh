@@ -9,7 +9,7 @@ echo "                   MULTIGRAVITY INSTALLER & SETUP"
 echo "=============================================================================="
 
 # 1. Dependency Checks
-echo "[1/5] Checking system prerequisites..."
+echo "[1/6] Checking system prerequisites..."
 MISSING_PKGS=()
 
 command -v python3 >/dev/null 2>&1 || MISSING_PKGS+=("python")
@@ -38,7 +38,7 @@ fi
 echo "✓ System dependencies and agy binary verified."
 
 # 2. Local Configuration
-echo "[2/5] Checking configuration..."
+echo "[2/6] Checking configuration..."
 if [ ! -f "config.local.toml" ]; then
     if [ -f "config.example.toml" ]; then
         echo "Creating config.local.toml from config.example.toml..."
@@ -54,12 +54,12 @@ else
 fi
 
 # 3. Permissions & Scripts
-echo "[3/5] Setting file permissions..."
+echo "[3/6] Setting file permissions..."
 chmod +x scripts/mgy scripts/multigravity-browser-helper
 echo "✓ Scripts marked executable."
 
 # 4. MCP Server Registration
-echo "[4/5] Verifying MCP server registration..."
+echo "[4/6] Verifying MCP server registration..."
 USER_UID="$(id -u)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$USER_UID}"
 
@@ -79,8 +79,18 @@ update_mcp_instructions(generate_main_agent_prompt())
 " 2>/dev/null || true
 echo "✓ Fleet instructions synchronized."
 
-# 5. Shell Alias & Symlink
-echo "[5/5] Configuring 'mgy' command and alias..."
+# 5. Remote Control Setup
+echo "[5/6] Ensuring Remote Control daemon is active..."
+if "$AGY_BIN" remote-control status 2>/dev/null | grep -q "inactive"; then
+    echo "Starting Antigravity Remote Control daemon..."
+    "$AGY_BIN" remote-control start 2>/dev/null || true
+    echo "✓ Remote Control daemon started."
+else
+    echo "✓ Remote Control daemon is active."
+fi
+
+# 6. Shell Alias & Symlink
+echo "[6/6] Configuring 'mgy' command and alias..."
 MGY_SCRIPT="$REPO_ROOT/scripts/mgy"
 
 # Symlink to ~/.local/bin/mgy if directory exists

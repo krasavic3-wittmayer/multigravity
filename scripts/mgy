@@ -60,18 +60,24 @@ if [ -z "$AGY_BIN" ] || [ ! -x "$AGY_BIN" ]; then
     exit 1
 fi
 
-# 2. Launch interactive agy with prompt
+# 2. Launch interactive agy with prompt and remote control enabled
+REMOTE_CTRL_FLAG="--remote-control"
+
 if [ $# -eq 0 ]; then
-    # No arguments: launch with fleet orchestration prompt
-    exec "$AGY_BIN" -i "$PROMPT_OUTPUT"
+    # No arguments: launch with fleet orchestration prompt and remote control
+    exec "$AGY_BIN" "$REMOTE_CTRL_FLAG" -i "$PROMPT_OUTPUT"
 elif [[ "${1:-}" == -* ]]; then
-    # User passed flags (e.g. -c, --mode plan)
-    exec "$AGY_BIN" "$@"
+    # User passed flags (e.g. -c, --mode plan): include --remote-control if not present
+    if [[ " $* " =~ " --remote-control " ]]; then
+        exec "$AGY_BIN" "$@"
+    else
+        exec "$AGY_BIN" "$REMOTE_CTRL_FLAG" "$@"
+    fi
 else
-    # User passed a text prompt: combine fleet prompt with user prompt
+    # User passed a text prompt: combine fleet prompt with user prompt and remote control
     USER_PROMPT="$1"
     shift
-    exec "$AGY_BIN" -i "$PROMPT_OUTPUT
+    exec "$AGY_BIN" "$REMOTE_CTRL_FLAG" -i "$PROMPT_OUTPUT
 
 ---
 User Request:

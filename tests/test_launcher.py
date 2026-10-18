@@ -97,6 +97,20 @@ class TestLauncherAndFleetPrompt(unittest.TestCase):
         self.assertIn("# Multigravity Fleet & Sub-Agent Orchestration", res.stdout)
         self.assertIn("invoke_subagent", res.stdout)
 
+    def test_ensure_remote_control_active(self):
+        from unittest.mock import patch
+        from multigravity.launcher import ensure_remote_control_active
+
+        # Mock subprocess.run to simulate inactive status
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.stdout = "Daemon status: inactive\n"
+            ensure_remote_control_active()
+            self.assertEqual(mock_run.call_count, 2)
+            # Verify the second call starts the daemon
+            second_call_args = mock_run.call_args_list[1][0][0]
+            self.assertIn("remote-control", second_call_args)
+            self.assertIn("start", second_call_args)
+
 
 if __name__ == "__main__":
     unittest.main()
