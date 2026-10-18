@@ -31,9 +31,15 @@ class DoctorCheckResult:
 class Doctor:
     """Runs system diagnostics, isolation audits, and collision prevention tests."""
 
-    def __init__(self, config: SystemConfig, agy_binary: str | None = None):
+    def __init__(
+        self,
+        config: SystemConfig,
+        agy_binary: str | None = None,
+        config_path: str | Path | None = None,
+    ):
         self.config = config
         self.agy_binary = agy_binary or shutil.which("agy") or "/usr/sbin/agy"
+        self.config_path = Path(config_path).resolve() if config_path else None
 
     def check_binaries(self) -> DoctorCheckResult:
         py_ok, py_msg = check_python_version()
@@ -227,15 +233,35 @@ class Doctor:
         )
 
     def check_two_worker_collision(self) -> DoctorCheckResult:
-        """Verifies distinct account identity hashes between two workers."""
+        """Verifies two-worker collision prevention, alternating probes, and credential isolation.
+        
+        Reported as SIMULATED when fewer than 2 workers have verified logins;
+        run for REAL (with live probes, credential hashing, and desktop keyring audits)
+        as soon as two or more workers are verified.
+        """
         workers = self.config.workers
         if len(workers) < 2:
             return DoctorCheckResult(
                 "two-worker collision", True, "Less than 2 workers configured; collision check skipped", check_type="REAL"
             )
 
-        w_a = workers[0]
-        w_b = workers[1]
+        verified = []
+        for w in workers:
+            mgr = WorkerProfileManager(w.profile_dir)
+            if mgr.load_metadata().get("state") == "OK":
+                verified.append(w)
+
+        if len(verified) < 2:
+            return DoctorCheckResult(
+                "two-worker collision",
+                True,
+                "Simulated (duplicate rejection verified in test suite; fewer than 2 workers logged in)",
+                check_type="SIMULATED",
+            )
+
+        # Real test on the first two verified workers
+        w_a = verified[0]
+        w_b = verified[1]
         p_a = Path(w_a.profile_dir).resolve()
         p_b = Path(w_b.profile_dir).resolve()
 
@@ -244,26 +270,90 @@ class Doctor:
         meta_a = mgr_a.load_metadata()
         meta_b = mgr_b.load_metadata()
 
-        if meta_a.get("state") == "OK" and meta_b.get("state") == "OK":
-            if meta_a.get("identity_hash") == meta_b.get("identity_hash"):
+        # Step 1: Snapshot owner's desktop keyring and ~/.gemini before probes
+        real_home = Path.home()
+        keyring_dir = real_home / ".local" / "share" / "keyrings"
+        gemini_dir = real_home / ".gemini"
+        home_snapshot_before = self._snapshot_dir_mtimes(keyring_dir)
+        gemini_snapshot_before = self._snapshot_dir_mtimes(gemini_dir)
+
+        # Step 2: Fingerprint credential files (hashes only)
+        keyrings_a = p_a / "data" / "keyrings"
+        keyrings_b = p_b / "data" / "keyrings"
+        fp_a_before = self._fingerprint_directory(keyrings_a)
+        fp_b_before = self._fingerprint_directory(keyrings_b)
+
+        # Step 3: Probe worker A, then verify worker B's credential files were untouched
+        probe_a_state, probe_a_detail, email_a = probe_worker_status(p_a, agy_binary=self.agy_binary, timeout_s=10.0)
+        fp_b_after_a = self._fingerprint_directory(keyrings_b)
+        if fp_b_after_a != fp_b_before:
+            return DoctorCheckResult(
+                "two-worker collision",
+                False,
+                f"Worker B credentials modified during Worker A probe: before={fp_b_before}, after={fp_b_after_a}",
+                check_type="REAL",
+            )
+
+        # Fingerprint worker A after its own probe has initialized its private keyring
+        fp_a_after_a = self._fingerprint_directory(keyrings_a)
+
+        # Step 4: Probe worker B, then verify worker A's credential files were untouched
+        probe_b_state, probe_b_detail, email_b = probe_worker_status(p_b, agy_binary=self.agy_binary, timeout_s=10.0)
+        fp_a_after_b = self._fingerprint_directory(keyrings_a)
+        if fp_a_after_b != fp_a_after_a:
+            return DoctorCheckResult(
+                "two-worker collision",
+                False,
+                f"Worker A credentials modified during Worker B probe: before={fp_a_after_a}, after={fp_a_after_b}",
+                check_type="REAL",
+            )
+
+        # Step 5: Verify distinct identity hashes and distinct email identities
+        hash_a = meta_a.get("identity_hash")
+        hash_b = meta_b.get("identity_hash")
+        if hash_a and hash_b and hash_a == hash_b:
+            return DoctorCheckResult(
+                "two-worker collision",
+                False,
+                f"Collision detected: Worker {w_a.id} and {w_b.id} share the exact same identity hash!",
+                check_type="REAL",
+            )
+
+        if email_a and email_b and email_a.strip().lower() == email_b.strip().lower():
+            return DoctorCheckResult(
+                "two-worker collision",
+                False,
+                f"Collision detected: Live probes for Worker {w_a.id} and {w_b.id} returned same email '{email_a}'!",
+                check_type="REAL",
+            )
+
+        # Step 6: Verify owner's desktop keyring and ~/.gemini remained completely untouched
+        home_snapshot_after = self._snapshot_dir_mtimes(keyring_dir)
+        gemini_snapshot_after = self._snapshot_dir_mtimes(gemini_dir)
+
+        for path, mtime in home_snapshot_before.items():
+            if home_snapshot_after.get(path) != mtime:
                 return DoctorCheckResult(
                     "two-worker collision",
                     False,
-                    f"Collision detected: Worker {w_a.id} and {w_b.id} share the same identity hash!",
+                    f"Host desktop keyring modified during collision check: {path}",
                     check_type="REAL",
                 )
-            return DoctorCheckResult(
-                "two-worker collision",
-                True,
-                f"Workers {w_a.id} and {w_b.id} have distinct verified identity hashes",
-                check_type="REAL",
-            )
+
+        for path, mtime in gemini_snapshot_before.items():
+            if gemini_snapshot_after.get(path) != mtime:
+                return DoctorCheckResult(
+                    "two-worker collision",
+                    False,
+                    f"Host ~/.gemini modified during collision check: {path}",
+                    check_type="REAL",
+                )
 
         return DoctorCheckResult(
             "two-worker collision",
             True,
-            "Simulated (duplicate rejection verified in test suite; workers not logged in yet)",
-            check_type="SIMULATED",
+            f"Real verification passed: Workers {w_a.id} and {w_b.id} have distinct verified identities; zero credential alteration or host keyring leakage",
+            check_type="REAL",
         )
 
     def check_credential_collision(self) -> DoctorCheckResult:
@@ -284,6 +374,8 @@ class Doctor:
     def print_report(self) -> bool:
         print("\n" + "=" * 78)
         print("                        MULTIGRAVITY DOCTOR REPORT")
+        if self.config_path:
+            print(f" Config: {self.config_path}")
         print("=" * 78)
         print(f" {'STATUS':<7} {'TYPE':<12} {'CHECK':<25} : {'DETAILS'}")
         print("-" * 78)

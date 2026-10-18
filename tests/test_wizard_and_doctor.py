@@ -285,6 +285,87 @@ with patch('builtins.input', return_value=''):
         mgr1 = WorkerProfileManager(self.w1_dir)
         self.assertNotEqual(mgr1.load_metadata().get("state"), "OK")
 
+    def test_doctor_two_worker_collision_simulated_and_real(self):
+        """Doctor reports SIMULATED when <2 workers logged in, and REAL when >=2 workers are OK."""
+        doc = Doctor(config=self.config, agy_binary=str(self.mock_agy))
+
+        # 0 workers logged in -> SIMULATED
+        res_zero = doc.check_two_worker_collision()
+        self.assertEqual(res_zero.check_type, "SIMULATED")
+        self.assertTrue(res_zero.passed)
+        self.assertIn("fewer than 2 workers logged in", res_zero.message)
+
+        # 1 worker logged in -> SIMULATED
+        mgr1 = WorkerProfileManager(self.w1_dir)
+        mgr1.ensure_structure()
+        (self.w1_dir / "home" / ".authenticated").touch()
+        mgr1.save_verified_identity("worker1.account@example.com")
+
+        res_one = doc.check_two_worker_collision()
+        self.assertEqual(res_one.check_type, "SIMULATED")
+        self.assertTrue(res_one.passed)
+
+        # 2 workers logged in with distinct identities -> REAL, PASSED
+        mgr2 = WorkerProfileManager(self.w2_dir)
+        mgr2.ensure_structure()
+        (self.w2_dir / "home" / ".authenticated").touch()
+        mgr2.save_verified_identity("worker2.account@example.com")
+
+        res_two = doc.check_two_worker_collision()
+        self.assertEqual(res_two.check_type, "REAL")
+        self.assertTrue(res_two.passed)
+        self.assertIn("distinct verified identities", res_two.message)
+
+        # 2 workers logged in with DUPLICATE identities -> REAL, FAILED
+        mgr2.save_verified_identity("worker1.account@example.com", salt=mgr1.load_metadata()["salt"])
+        res_dup = doc.check_two_worker_collision()
+        self.assertEqual(res_dup.check_type, "REAL")
+        self.assertFalse(res_dup.passed)
+        self.assertIn("Collision detected", res_dup.message)
+
+    def test_config_resolution_precedence(self):
+        """Config resolution follows: --config -> MULTIGRAVITY_CONFIG -> ./config.local.toml, never config.example.toml."""
+        from multigravity.cli import resolve_config_path
+
+        flag_cfg = self.tmp_path / "flag_config.toml"
+        flag_cfg.write_text("test = 1\n")
+
+        env_cfg = self.tmp_path / "env_config.toml"
+        env_cfg.write_text("test = 2\n")
+
+        local_cfg = self.tmp_path / "config.local.toml"
+        local_cfg.write_text("test = 3\n")
+
+        # 1. Flag overrides everything
+        with patch.dict(os.environ, {"MULTIGRAVITY_CONFIG": str(env_cfg)}):
+            resolved = resolve_config_path(config_arg=str(flag_cfg))
+            self.assertEqual(resolved, flag_cfg.resolve())
+
+        # 2. Env overrides ./config.local.toml
+        orig_cwd = os.getcwd()
+        try:
+            os.chdir(self.tmp_path)
+            with patch.dict(os.environ, {"MULTIGRAVITY_CONFIG": str(env_cfg)}):
+                resolved = resolve_config_path()
+                self.assertEqual(resolved, env_cfg.resolve())
+
+            # 3. Default to ./config.local.toml when no flag or env var
+            with patch.dict(os.environ, {}, clear=True):
+                resolved = resolve_config_path()
+                self.assertEqual(resolved, local_cfg.resolve())
+
+            # 4. Fail when ./config.local.toml is missing (no fallback to config.example.toml)
+            local_cfg.unlink()
+            (self.tmp_path / "config.example.toml").write_text("example = true\n")
+            with patch.dict(os.environ, {}, clear=True):
+                with self.assertRaises(FileNotFoundError) as ctx:
+                    resolve_config_path()
+                self.assertIn("config.local.toml", str(ctx.exception))
+                self.assertIn("config.example.toml", str(ctx.exception))
+        finally:
+            os.chdir(orig_cwd)
+
 
 if __name__ == "__main__":
     unittest.main()
+

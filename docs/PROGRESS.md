@@ -55,8 +55,14 @@ Phase 6 Complete: Preflight, Real Keyring Smoke Verification, Leak Audit & Owner
   - `docs/LOGIN_RUNBOOK.md`: Comprehensive step-by-step interactive onboarding guide written for the owner.
   - `AGENTS.md` Rule Update: Owner explicitly permitted agents to create git commits at agent judgment when coherent units of work are verified; git push, force-push, tag creation, remote changes, and git config changes remain forbidden.
 
+- **Phase 7 Pre-Login Verification & Anchoring**:
+  - Anchored root and single-location patterns in `.gitignore` (`/workers/`, `/state/`, `/worker_profiles/`, `/journals/`, `/logs/`, `/build/`, `/.venv/`, `/config.local.toml`, etc.) to prevent nested code hiding, and added unit tests in `tests/test_gitignore.py` testing both directions.
+  - Hardened config resolution in `multigravity/cli.py` (`--config` flag -> `MULTIGRAVITY_CONFIG` env -> `./config.local.toml`) with explicit error and zero silent fallback to `config.example.toml`. Active config path is displayed at the top of wizard, status, and doctor output.
+  - Implemented dynamic `two-worker collision` test in `multigravity/doctor.py`: reports `[SIMULATED]` when fewer than 2 workers are logged in, and runs `[REAL]` when 2 or more workers are verified (snapshots host keyring and `~/.gemini`, fingerprints worker credential dirs with SHA-256 before/after alternating live probes, checks distinct identities, and verifies zero host modification).
+  - Updated `docs/LOGIN_RUNBOOK.md` to match the exact 8-step sequential onboarding flow and documented `ssh-add` as optional for runbook execution.
+
 ## In Progress
-- Staging and committing verified changes into coherent, logical commits.
+- Staging and committing verified pre-login changes.
 
 ## Next
-- Owner executes the commands in `docs/LOGIN_RUNBOOK.md` to register Account 1 identity and log in background Accounts 2–4.
+- Owner executes the 8-step interactive sequence in `docs/LOGIN_RUNBOOK.md` to register Account 1 and authenticate Accounts 2–4.

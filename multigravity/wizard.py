@@ -102,6 +102,7 @@ class LoginWizard:
         main_account_email: str | None = None,
         state_dir: Path | None = None,
         skip_main_check: bool = False,
+        config_path: str | Path | None = None,
     ):
         self.config = config
         self.agy_binary = agy_binary or "/usr/sbin/agy"
@@ -109,6 +110,7 @@ class LoginWizard:
         self.main_account_email = main_account_email
         self.state_dir = state_dir
         self.skip_main_check = skip_main_check
+        self.config_path = Path(config_path).resolve() if config_path else None
 
     def preflight(self):
         """Runs preflight checks: agy binary, system isolation tools, valid config, worker count, path guard."""
@@ -157,6 +159,8 @@ class LoginWizard:
         board = self.get_status_board()
         print("\n" + "=" * 78)
         print("                        MULTIGRAVITY WORKER STATUS")
+        if self.config_path:
+            print(f" Config: {self.config_path}")
         print("=" * 78)
         print(f"{'WORKER (ACCOUNT)':<26} {'STATE':<14} {'IDENTITY':<18} {'VERIFIED'}")
         print("-" * 78)
@@ -196,6 +200,8 @@ class LoginWizard:
         self.lock.acquire()
         try:
             print("\nStarting Multigravity Login Wizard...")
+            if self.config_path:
+                print(f"Config: {self.config_path}")
             self.print_status_board()
 
             workers_to_login = []

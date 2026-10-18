@@ -19,24 +19,46 @@ from multigravity.preflight import PreflightError, verify_dependencies_or_raise
 from multigravity.wizard import LoginWizard, format_worker_display
 
 
+def resolve_config_path(config_arg: str | None = None) -> Path:
+    """Resolves config path: --config flag > MULTIGRAVITY_CONFIG env > ./config.local.toml.
+    
+    Fails if no local config is found, never falling back to config.example.toml.
+    """
+    if config_arg:
+        p = Path(config_arg)
+        if not p.exists():
+            raise FileNotFoundError(f"Configuration file specified by --config not found: {p}")
+        return p.resolve()
+
+    env_config = os.environ.get("MULTIGRAVITY_CONFIG")
+    if env_config:
+        p = Path(env_config)
+        if not p.exists():
+            raise FileNotFoundError(f"Configuration file specified by MULTIGRAVITY_CONFIG not found: {p}")
+        return p.resolve()
+
+    local_path = Path("config.local.toml")
+    if local_path.exists():
+        return local_path.resolve()
+
+    raise FileNotFoundError(
+        "No configuration file found. Please create 'config.local.toml' (e.g. by copying config.example.toml):\n"
+        "    cp config.example.toml config.local.toml\n"
+        "Or specify a config file via --config <path> or MULTIGRAVITY_CONFIG=<path>."
+    )
+
+
+def load_system_config(config_arg: str | None = None) -> tuple[SystemConfig, Path]:
+    p = resolve_config_path(config_arg)
+    return SystemConfig.from_file(p), p
+
+
 def get_default_config_path() -> Path:
-    candidates = [
-        Path("config.local.toml"),
-        Path("config.toml"),
-        Path.home() / ".config" / "multigravity" / "config.toml",
-        Path("config.example.toml"),
-    ]
-    for c in candidates:
-        if c.exists():
-            return c
-    return Path("config.local.toml")
-
-
-def load_system_config(config_arg: str | None = None) -> SystemConfig:
-    p = Path(config_arg) if config_arg else get_default_config_path()
-    if p.exists():
-        return SystemConfig.from_file(p)
-    return SystemConfig()
+    """Returns resolved config path or falls back to ./config.local.toml."""
+    try:
+        return resolve_config_path()
+    except FileNotFoundError:
+        return Path("config.local.toml").resolve()
 
 
 def get_daemon_pid_path() -> Path:
@@ -56,18 +78,19 @@ async def is_daemon_running(socket_path: str) -> bool:
         return False
 
 
-def cmd_status(config: SystemConfig):
-    wizard = LoginWizard(config=config)
+def cmd_status(config: SystemConfig, config_path: Path):
+    wizard = LoginWizard(config=config, config_path=config_path)
     wizard.print_status_board()
 
 
-def cmd_doctor(config: SystemConfig) -> int:
-    doc = Doctor(config=config)
+def cmd_doctor(config: SystemConfig, config_path: Path) -> int:
+    doc = Doctor(config=config, config_path=config_path)
     success = doc.print_report()
     return 0 if success else 1
 
 
-def cmd_set_main_identity(config: SystemConfig) -> int:
+def cmd_set_main_identity(config: SystemConfig, config_path: Path) -> int:
+    print(f"Using configuration: {config_path}")
     print("=== Multigravity: Register Main Account (Account 1) Identity ===")
     print("Enter the Google email address for your interactive Main Account (Account 1).")
     print("NOTE: The email itself is NEVER saved, logged, or sent anywhere.")
@@ -89,7 +112,7 @@ def cmd_set_main_identity(config: SystemConfig) -> int:
         return 1
 
 
-def cmd_login(config: SystemConfig, worker_id: str) -> int:
+def cmd_login(config: SystemConfig, config_path: Path, worker_id: str) -> int:
     valid_ids = [w.id for w in config.workers]
     worker_displays = [format_worker_display(w.id, w.label) for w in config.workers]
     if worker_id not in valid_ids:
@@ -97,7 +120,7 @@ def cmd_login(config: SystemConfig, worker_id: str) -> int:
         return 1
 
     try:
-        wizard = LoginWizard(config=config)
+        wizard = LoginWizard(config=config, config_path=config_path)
         success = wizard.run_wizard(target_worker_id=worker_id)
         return 0 if success else 1
     except PreflightError as e:
@@ -145,13 +168,14 @@ def cmd_stop(config: SystemConfig) -> int:
     return 0
 
 
-def cmd_default_flow(config: SystemConfig) -> int:
+def cmd_default_flow(config: SystemConfig, config_path: Path) -> int:
     """Preflight -> Login Wizard for unverified workers -> Start daemon -> Status board."""
     try:
-        wizard = LoginWizard(config=config)
+        wizard = LoginWizard(config=config, config_path=config_path)
 
         # 1. Preflight & Wizard
         print("=== Multigravity Setup & Launch ===")
+        print(f"Configuration: {config_path}")
         wizard_ok = wizard.run_wizard()
         if not wizard_ok:
             print("[!] Login wizard did not complete. Exiting.")
@@ -165,7 +189,7 @@ def cmd_default_flow(config: SystemConfig) -> int:
             print(f"Starting core daemon in background on {config.socket_path}...")
             pid_file = get_daemon_pid_path()
             proc = subprocess.Popen(
-                [sys.executable, "-m", "multigravity.daemon", str(get_default_config_path())],
+                [sys.executable, "-m", "multigravity.daemon", str(config_path)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
@@ -212,18 +236,22 @@ def main():
     subparsers.add_parser("stop", help="Stop running core daemon cleanly")
 
     args = parser.parse_args()
-    config = load_system_config(args.config)
+    try:
+        config, config_path = load_system_config(args.config)
+    except FileNotFoundError as e:
+        print(f"[!] Configuration error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if args.subcommand is None:
-        sys.exit(cmd_default_flow(config))
+        sys.exit(cmd_default_flow(config, config_path))
     elif args.subcommand == "status":
-        cmd_status(config)
+        cmd_status(config, config_path)
     elif args.subcommand == "doctor":
-        sys.exit(cmd_doctor(config))
+        sys.exit(cmd_doctor(config, config_path))
     elif args.subcommand == "login":
-        sys.exit(cmd_login(config, args.worker_id))
+        sys.exit(cmd_login(config, config_path, args.worker_id))
     elif args.subcommand == "set-main-identity":
-        sys.exit(cmd_set_main_identity(config))
+        sys.exit(cmd_set_main_identity(config, config_path))
     elif args.subcommand == "stop":
         sys.exit(cmd_stop(config))
 
