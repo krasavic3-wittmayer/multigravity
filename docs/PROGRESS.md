@@ -98,11 +98,19 @@ Phase 6 Complete: Preflight, Real Keyring Smoke Verification, Leak Audit & Owner
 ## Current Phase
 Phase 11 Complete: Main Agent Fleet Prompt, Subagent Delegation & `mgy` Launcher
 
+- Phase 12: Fleet Process Lifecycle & Clean/Hard Kill Escalation.
+  - Implemented `multigravity.cleanup` module to detect and manage background daemon, worker agents, subagents, and isolated keyrings.
+  - Configured graceful SIGTERM termination followed by SIGKILL escalation if any worker or daemon process persists past the timeout (default 4.0s).
+  - Wired signal and exit traps into `scripts/mgy` to cleanly reap background fleet processes when the main `agy` session finishes or is killed.
+  - Enhanced `multigravity.cli stop` (`mgy stop`) to utilize full clean/hard kill escalation.
+  - Added unit test suite in `tests/test_cleanup.py` (70/70 tests passing).
+
 ## Done
-- All bootstrap and Phases 0–11 complete.
+- All bootstrap and Phases 0–12 complete.
 
 ## In Progress
 - Completed. Awaiting owner instructions.
 
 ## Next
 - Owner running `mgy` or submitting real tasks via MCP to background workers.
+

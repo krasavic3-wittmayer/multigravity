@@ -60,26 +60,40 @@ if [ -z "$AGY_BIN" ] || [ ! -x "$AGY_BIN" ]; then
     exit 1
 fi
 
-# 2. Launch interactive agy with prompt and remote control enabled
+# 2. Setup cleanup trap: when main agy exits or is killed, cleanly terminate workers and daemon
+cleanup_fleet() {
+    local rc=$?
+    trap - EXIT INT TERM HUP
+    echo ""
+    echo "=============================================================================="
+    echo "Multigravity: Main agent session ended. Stopping fleet and cleaning up..."
+    echo "=============================================================================="
+    python3 -m multigravity.cleanup --timeout 4.0 || true
+    exit "$rc"
+}
+trap cleanup_fleet EXIT INT TERM HUP
+
+# 3. Launch interactive agy with prompt and remote control enabled
 REMOTE_CTRL_FLAG="--remote-control"
 
 if [ $# -eq 0 ]; then
     # No arguments: launch with fleet orchestration prompt and remote control
-    exec "$AGY_BIN" "$REMOTE_CTRL_FLAG" -i "$PROMPT_OUTPUT"
+    "$AGY_BIN" "$REMOTE_CTRL_FLAG" -i "$PROMPT_OUTPUT"
 elif [[ "${1:-}" == -* ]]; then
     # User passed flags (e.g. -c, --mode plan): include --remote-control if not present
     if [[ " $* " =~ " --remote-control " ]]; then
-        exec "$AGY_BIN" "$@"
+        "$AGY_BIN" "$@"
     else
-        exec "$AGY_BIN" "$REMOTE_CTRL_FLAG" "$@"
+        "$AGY_BIN" "$REMOTE_CTRL_FLAG" "$@"
     fi
 else
     # User passed a text prompt: combine fleet prompt with user prompt and remote control
     USER_PROMPT="$1"
     shift
-    exec "$AGY_BIN" "$REMOTE_CTRL_FLAG" -i "$PROMPT_OUTPUT
+    "$AGY_BIN" "$REMOTE_CTRL_FLAG" -i "$PROMPT_OUTPUT
 
 ---
 User Request:
 $USER_PROMPT" "$@"
 fi
+

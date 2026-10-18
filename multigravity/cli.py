@@ -133,44 +133,12 @@ def cmd_login(config: SystemConfig, config_path: Path, worker_id: str) -> int:
         return 1
 
 
-def cmd_stop(config: SystemConfig) -> int:
-    pid_file = get_daemon_pid_path()
-    stopped = False
+def cmd_stop(config: SystemConfig, timeout_s: float = 4.0) -> int:
+    from multigravity.cleanup import cleanup_multigravity
 
-    if pid_file.exists():
-        try:
-            pid = int(pid_file.read_text().strip())
-            os.kill(pid, signal.SIGTERM)
-            print(f"Sent SIGTERM to daemon process (PID {pid}). Waiting for clean shutdown...")
-            for _ in range(30):
-                time.sleep(0.1)
-                try:
-                    os.kill(pid, 0)
-                except OSError:
-                    stopped = True
-                    break
-            if not stopped:
-                os.kill(pid, signal.SIGKILL)
-                stopped = True
-            try:
-                pid_file.unlink()
-            except OSError:
-                pass
-        except (ValueError, OSError):
-            pass
-
-    # Check socket as well
-    if Path(config.socket_path).exists():
-        try:
-            Path(config.socket_path).unlink()
-        except OSError:
-            pass
-
-    if stopped:
-        print("[✓] multigravity daemon stopped cleanly.")
-    else:
-        print("Daemon is not currently running.")
-    return 0
+    print(f"Stopping multigravity daemon and worker agents (timeout: {timeout_s:.1f}s)...")
+    res = cleanup_multigravity(config=config, timeout_s=timeout_s)
+    return 0 if res.get("success") else 1
 
 
 def cmd_default_flow(config: SystemConfig, config_path: Path) -> int:
@@ -238,7 +206,10 @@ def main():
     )
 
     # stop
-    subparsers.add_parser("stop", help="Stop running core daemon cleanly")
+    p_stop = subparsers.add_parser("stop", help="Stop running core daemon and worker processes cleanly")
+    p_stop.add_argument(
+        "--timeout", "-t", type=float, default=4.0, help="Grace timeout in seconds before SIGKILL escalation (default: 4.0)"
+    )
 
     args = parser.parse_args()
     try:
@@ -258,7 +229,7 @@ def main():
     elif args.subcommand == "set-main-identity":
         sys.exit(cmd_set_main_identity(config, config_path))
     elif args.subcommand == "stop":
-        sys.exit(cmd_stop(config))
+        sys.exit(cmd_stop(config, timeout_s=getattr(args, "timeout", 4.0)))
 
 
 if __name__ == "__main__":

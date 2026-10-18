@@ -179,10 +179,14 @@ class AgyCliWorkerAdapter(WorkerAdapter):
             self._cancelled_workers.discard(worker_id)
             if scratch_dir and scratch_dir.exists():
                 shutil.rmtree(scratch_dir, ignore_errors=True)
-            if proc and proc.pid:
+            if proc and proc.returncode is None:
                 try:
                     pgid = os.getpgid(proc.pid)
                     os.killpg(pgid, signal.SIGTERM)
+                    try:
+                        await asyncio.wait_for(proc.wait(), timeout=1.0)
+                    except (asyncio.TimeoutError, Exception):
+                        os.killpg(pgid, signal.SIGKILL)
                 except (ProcessLookupError, OSError):
                     pass
 
