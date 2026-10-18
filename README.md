@@ -81,30 +81,45 @@ The main agent interacts with `multigravity` via 6 fast tools (all return < 1s):
 - Linux (x86_64 or aarch64)
 - Python 3.12+ (Python 3.14 recommended, zero third-party dependencies required)
 - Google Antigravity CLI (`agy`) installed at `/usr/sbin/agy`
+- Desktop keyring isolation tools (`dbus-run-session`, `gnome-keyring-daemon`, `secret-tool`)
 
 ### 2. Configure Workers
 Copy the example configuration:
 ```bash
 cp config.example.toml config.toml
 ```
-Edit `config.toml` to specify your worker profiles and concurrency settings.
+Edit `config.toml` to specify your worker profiles (1 to 3 background accounts; Account 1 is reserved for the interactive main agent).
 
-### 3. Worker One-Time Authentication
-Authenticate each worker profile interactively in its own isolated environment:
+### 3. Run Doctor to Audit Isolation
+Verify path guards, environment filtering, and collision safety:
 ```bash
-./scripts/multigravity-auth ~/.multigravity/workers/worker-1
-./scripts/multigravity-auth ~/.multigravity/workers/worker-2
-./scripts/multigravity-auth ~/.multigravity/workers/worker-3
+python3 -m multigravity.cli doctor
 ```
-Follow the on-screen prompts to log into each Google AI Pro account. Once authenticated, exit with `/quit` or `Ctrl+D Ctrl+D`.
 
-### 4. Start Core Daemon
+### 4. Interactive Sequential Login Wizard
+Run the unified CLI without arguments to walk through logging in unverified accounts one at a time:
 ```bash
-python3 -m multigravity.daemon config.toml
+python3 -m multigravity.cli
 ```
-Or run in the background / as a systemd user service.
+Or log in / re-authenticate a single worker profile:
+```bash
+python3 -m multigravity.cli login worker-1
+```
+- **Login Isolation**: Each worker runs inside a dedicated private D-Bus session with an isolated keyring (`$XDG_DATA_HOME/keyrings/login.keyring`, mode `0700`).
+- **OAuth URL Interception**: The browser helper displays the login URL prominently and warns you to sign in with the worker's dedicated account (not Account 1).
+- **Duplicate Prevention**: If an account is already logged into another worker or the main account, the login is rejected and an isolated wipe/retry is offered.
 
-### 5. Register with Main Agent MCP Client
+### 5. Check Status Board
+```bash
+python3 -m multigravity.cli status
+```
+
+### 6. Stop Core Daemon
+```bash
+python3 -m multigravity.cli stop
+```
+
+### 7. Register with Main Agent MCP Client
 Register the MCP shim with `agy`:
 ```bash
 agy mcp add multigravity python3 -m multigravity.mcp_shim

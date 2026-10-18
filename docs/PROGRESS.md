@@ -1,12 +1,12 @@
 # Progress Log
 
 ## Current Phase
-Phase 4 Complete: Hardened, Documented, and Fully Tested against Acceptance Criteria
+Phase 6 Complete: Preflight, Real Keyring Smoke Verification, Leak Audit & Owner Login Runbook
 
 ## Done
 - **Bootstrap repository**: Created `~/Projects/multigravity`, initialized git with branch `main`.
 - **Initial files & commit**: Created `AGENTS.md`, `README.md`, `.gitignore`, and `docs/SPEC.md`. Initial commit `8f60918f196048a371b49b9f14f9b2548934ee82`.
-- **Remote publishing**: Fixed SSH passphrase block by switching remote URL to HTTPS using already-configured GitHub CLI credential helper. Pushed `main` to `krasavic3-wittmayer/multigravity` on GitHub and verified clean tracking.
+- **Remote configuration**: Switched git origin back to SSH (`git@github.com:krasavic3-wittmayer/multigravity.git`). Added rule to `AGENTS.md` specifying that the remote uses SSH and network git commands use `GIT_SSH_COMMAND='ssh -o BatchMode=yes'` to prevent blocking. Verified fail-fast behavior with publickey check.
 - **Phase 0 Investigation Deliverables**:
   - `probes/probe_cli.py`: Verified agy CLI capabilities, print mode, permissions bypass, and environment isolation.
   - `probes/probe_worker_auth.py`: Non-invasive, credentials-safe auth and health checker for worker profiles.
@@ -34,10 +34,29 @@ Phase 4 Complete: Hardened, Documented, and Fully Tested against Acceptance Crit
   - `scripts/multigravity-auth`: Interactive CLI tool to re-authenticate worker profiles safely.
   - `pyproject.toml`: Project build definition with zero external third-party dependencies.
   - `README.md`: Architecture diagrams, usage documentation, troubleshooting, and verification guide.
-  - Full test suite in `tests/`: 23 unit and integration tests passing cleanly.
+- **Phase 5 Real Worker Login & Isolation**:
+  - `docs/LOGIN_ISOLATION.md`: Documented empirical discoveries: `agy` uses D-Bus desktop keyring (`service=gemini`, `username=antigravity`), which creates silent cross-account overwrite collision unless isolated with private D-Bus sessions (`dbus-run-session`) and unlocked private `gnome-keyring-daemon` instances (`mode 0700`).
+  - `multigravity/isolation.py`: Strict `PathGuard` (refuses user HOME, parent dirs, `~/.gemini`, `~/.config`, overlapping worker paths), `EnvironmentAllowList` (whitelists `PATH`, `LANG`, `TERM`; strips all API keys/tokens), identity hashing with random salt, and masked email formatting (`kr***2@example.com`).
+  - `scripts/multigravity-browser-helper`: Intercepts `xdg-open` browser calls, displays OAuth URL prominently in a banner, warns against auto-selecting Account 1, and attempts private/incognito browser launch.
+  - `multigravity/probes.py`: Status probe (`OK`, `NOT_LOGGED_IN`, `AUTH_EXPIRED`, `RATE_LIMITED`, `UNKNOWN`) and automatic identity extraction from private keyring without reading credential tokens.
+  - `multigravity/wizard.py`: Sequential interactive login wizard with PID lock file (`multigravity_wizard.lock`), duplicate account collision prevention (cross-worker and Account 1 check), and clean `SIGINT` process group cleanup.
+  - `multigravity/doctor.py`: Diagnostics and two-worker collision test suite.
+  - `multigravity/cli.py`: Unified CLI (`multigravity`, `login`, `status`, `doctor`, `stop`) using standard library `argparse`.
+- **Phase 6 Verification, Smoke Testing & Audit**:
+  - `multigravity/preflight.py`: Added early dependency checks for Python 3.10+, `agy`, `dbus-run-session`, `gnome-keyring-daemon`, `secret-tool`, `xdg-open`, and `bash` with exact Arch Linux package install commands (`sudo pacman -S dbus gnome-keyring libsecret xdg-utils`).
+  - `config.local.toml`: Created gitignored local config for real use mapping `worker-1` -> Account 2, `worker-2` -> Account 3, `worker-3` -> Account 4 under `~/.multigravity/workers/worker-N`.
+  - Worker display format: Updated all status boards and wizard prompts to explicitly display `worker-N (Account X)` so the two numbering schemes cannot be confused.
+  - `multigravity/identity.py` & `multigravity set-main-identity`: Implemented Account 1 identity storage as salted SHA-256 hash in `~/.multigravity/state/main_identity.json` (`mode 0600`), never storing plaintext email; wizard enforces Account 1 presence before logins.
+  - Real Keyring Smoke Test (`tests/test_keyring_smoke.py`): Verified end-to-end secret storage and retrieval in private D-Bus/keyring session, verified zero modification to host desktop keyring (`~/.local/share/keyrings`) and `~/.gemini`, zero orphan processes, and clean throwaway directory removal.
+  - Browser Helper Smoke Test: Verified `scripts/multigravity-browser-helper` with dummy URL; verified prominent banner display and zero contact with Google URLs.
+  - Real Doctor & Unit Tests: Ran `multigravity doctor` with real config and binaries; all checks clearly labeled `[REAL]` and `[SIMULATED]`; full test suite (43 tests) passing.
+  - Leak Audit: Scanned git history and working tree for emails, JWTs (`eyJ`), API keys, and credentials; confirmed `.gitignore` strictly covers `*.keyring`, `config.local.toml`, `state/`, `*.salt`, `*.lock`, `*.pid`, `worker_profiles/`, `workers/`, `__pycache__`, and `.worktrees/`.
+  - SSH Check: Executed read-only `ssh-add -l` check without modifying keys or configuration.
+  - `docs/LOGIN_RUNBOOK.md`: Comprehensive step-by-step interactive onboarding guide written for the owner.
+  - `AGENTS.md` Rule Update: Owner explicitly permitted agents to create git commits at agent judgment when coherent units of work are verified; git push, force-push, tag creation, remote changes, and git config changes remain forbidden.
 
 ## In Progress
-- Completed and awaiting user review. Working tree changes kept uncommitted per `AGENTS.md`.
+- Staging and committing verified changes into coherent, logical commits.
 
 ## Next
-- Real account token login via `scripts/multigravity-auth` on user's target machine using the checklist in `docs/PHASE0_CHECKLIST.md`.
+- Owner executes the commands in `docs/LOGIN_RUNBOOK.md` to register Account 1 identity and log in background Accounts 2–4.
