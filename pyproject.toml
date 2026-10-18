@@ -11,5 +11,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
+multigravity = "multigravity.cli:main"
 multigravity-daemon = "multigravity.daemon:main"
 multigravity-mcp-shim = "multigravity.mcp_shim:main"
+
