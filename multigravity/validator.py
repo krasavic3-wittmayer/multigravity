@@ -80,13 +80,17 @@ class OutputContractValidator:
             max_output_chars=max_output_chars,
         )
 
-    @staticmethod
-    def extract_json(raw_text: str) -> dict[str, Any] | None:
+    @classmethod
+    def extract_json(cls, raw_text: str) -> dict[str, Any] | None:
         raw_text = raw_text.strip()
         # 1. Try direct parsing
         try:
             parsed = json.loads(raw_text)
             if isinstance(parsed, dict):
+                if "response" in parsed and isinstance(parsed["response"], str) and "summary" not in parsed:
+                    inner = cls.extract_json(parsed["response"])
+                    if inner:
+                        return inner
                 return parsed
         except json.JSONDecodeError:
             pass
@@ -97,6 +101,10 @@ class OutputContractValidator:
             try:
                 parsed = json.loads(fence_match.group(1).strip())
                 if isinstance(parsed, dict):
+                    if "response" in parsed and isinstance(parsed["response"], str) and "summary" not in parsed:
+                        inner = cls.extract_json(parsed["response"])
+                        if inner:
+                            return inner
                     return parsed
             except json.JSONDecodeError:
                 pass
@@ -108,6 +116,10 @@ class OutputContractValidator:
             try:
                 parsed = json.loads(raw_text[first_brace : last_brace + 1])
                 if isinstance(parsed, dict):
+                    if "response" in parsed and isinstance(parsed["response"], str) and "summary" not in parsed:
+                        inner = cls.extract_json(parsed["response"])
+                        if inner:
+                            return inner
                     return parsed
             except json.JSONDecodeError:
                 pass

@@ -19,6 +19,8 @@ class WorkerResult:
 class WorkerAdapter(ABC):
     """Abstract interface that every worker adapter must implement."""
 
+    adapter_kind: str = "base"
+
     @abstractmethod
     async def run(
         self,
@@ -26,6 +28,9 @@ class WorkerAdapter(ABC):
         prompt: str,
         timeout_s: float,
         working_dir: str | None = None,
+        profile_dir: str | None = None,
+        inputs: Any = None,
+        mode: str | None = None,
     ) -> WorkerResult:
         """Executes a prompt on the given worker within timeout_s."""
         pass

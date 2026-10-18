@@ -68,9 +68,25 @@ Phase 6 Complete: Preflight, Real Keyring Smoke Verification, Leak Audit & Owner
   - Documented `enabled` flag and 2-worker scaling in `config.example.toml` and `docs/LOGIN_RUNBOOK.md`.
   - Added prominent banner before TUI launch instructing users not to enter prompts and to exit via `/quit` or `Ctrl-D` once signed in.
   - Created `tests/test_worker_scenarios.py` covering 2-worker setups, disabled workers, removed workers with stale state, and daemon startup (51/51 tests passing).
+- **Phase 9 Real Worker Adapter Wiring & End-to-End Verification**:
+  - Root cause resolved: `CoreDaemon.__init__` previously defaulted unconditionally to `FakeWorkerAdapter()` because `SystemConfig` lacked an `adapter` field. Added `adapter: str = "agy_cli"` in `SystemConfig` with validation (`agy_cli` | `fake`), and updated `CoreDaemon` to instantiate `AgyCliWorkerAdapter` by default unless explicitly configured as `fake`.
+  - Documented `adapter` under `[daemon]` in `config.example.toml` and set `adapter = "agy_cli"` in `config.local.toml`.
+  - Implemented wrapper-per-task execution in `AgyCliWorkerAdapter`: launches `agy` via `dbus-run-session` + unlocked `gnome-keyring-daemon` in an isolated process group (`start_new_session=True`) with strictly filtered environment (`EnvironmentAllowList.build_worker_env`). Reaps full process group on cancel/timeout.
+  - Read-only scratch directory: Each task runs in a fresh disposable scratch directory inside the worker's profile `tmp/` holding only `inputs.json`, removed automatically in a `finally` block upon completion.
+  - Unmistakable fake markers: `FakeWorkerAdapter` outputs prepend `[FAKE]` to summaries; `adapter` kind is reported in `list_workers()`, `multigravity status`, daemon startup logs, and `events.jsonl`.
+  - Response unwrapping: Added JSON envelope unwrapping in both `AgyCliWorkerAdapter` and `OutputContractValidator.extract_json` to cleanly extract the model's response text from the `agy` CLI envelope.
+  - Doctor test adjustment: Updated `_snapshot_dir_mtimes` in `Doctor` to ignore active `antigravity-cli` assistant log directories, ensuring clean `[PASS]` on the real two-worker collision test.
+  - End-to-end real task verification: Started daemon and executed real tasks on both `worker-1` (`Account 2`, 13.7s, confidence 1.0) and `worker-2` (`Account 3`, 15.7s, confidence 1.0) with prompt `"five short bullets on how Unix domain sockets differ from TCP sockets"` (max 1200 chars). Both tasks passed contract validation without repair passes.
+  - Clean shutdown & leak audit: Verified zero orphan processes, zero leftover scratch directories, and full test suite passing (54/54 tests).
+
+## Current Phase
+Phase 9 Complete: Real Worker Adapter Wired, Verified E2E, and Tested
+
+## Done
+- All bootstrap and Phases 0–9 complete.
 
 ## In Progress
-- Final report for the owner.
+- Completed. Awaiting owner instructions.
 
 ## Next
-- Owner runs `python3 -m multigravity.cli` to start the background daemon, or `python3 -m multigravity.cli status` / `doctor`.
+- Main agent submitting real tasks via MCP to background worker accounts.

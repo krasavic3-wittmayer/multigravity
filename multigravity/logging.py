@@ -58,12 +58,22 @@ class StructuredLogger:
             details={"kind": kind, "mode": mode, "max_output_chars": max_output_chars},
         )
 
-    def task_assigned(self, task_id: str, worker_id: str, worker_label: str, attempt: int):
+    def task_assigned(
+        self,
+        task_id: str,
+        worker_id: str,
+        worker_label: str,
+        attempt: int,
+        adapter: str | None = None,
+    ):
+        details: dict[str, Any] = {"worker_label": worker_label, "attempt": attempt}
+        if adapter:
+            details["adapter"] = adapter
         self.log_event(
             "task_assigned",
             task_id=task_id,
             worker_id=worker_id,
-            details={"worker_label": worker_label, "attempt": attempt},
+            details=details,
         )
 
     def task_retried(self, task_id: str, attempt: int, error_code: str, reason: str):
@@ -87,11 +97,14 @@ class StructuredLogger:
             details={"reason": reason},
         )
 
-    def task_done(self, task_id: str, duration_s: float):
+    def task_done(self, task_id: str, duration_s: float, adapter: str | None = None):
+        details: dict[str, Any] = {"duration_s": duration_s}
+        if adapter:
+            details["adapter"] = adapter
         self.log_event(
             "task_done",
             task_id=task_id,
-            details={"duration_s": duration_s},
+            details=details,
         )
 
     def task_failed(self, task_id: str, error_code: str, message: str):

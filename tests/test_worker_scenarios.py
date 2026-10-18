@@ -250,6 +250,78 @@ exit 0
         self.assertEqual(w1.state, WorkerState.IDLE)
         self.assertEqual(w2.state, WorkerState.IDLE)
 
+    def test_adapter_selection_default_and_fake(self):
+        """SystemConfig defaults to agy_cli; fake adapter can be explicitly configured."""
+        from multigravity.adapters.agy_cli import AgyCliWorkerAdapter
+        from multigravity.adapters.fake import FakeWorkerAdapter
+
+        # Default is agy_cli
+        cfg_default = SystemConfig(
+            log_dir=str(self.tmp_path / "logs"),
+            journal_dir=str(self.tmp_path / "journals"),
+            socket_path=str(self.tmp_path / "test1.sock"),
+        )
+        self.assertEqual(cfg_default.adapter, "agy_cli")
+        daemon_real = CoreDaemon(cfg_default)
+        self.assertIsInstance(daemon_real.adapter, AgyCliWorkerAdapter)
+        self.assertEqual(daemon_real.adapter.adapter_kind, "agy_cli")
+
+        # Configured fake
+        cfg_fake = SystemConfig(
+            adapter="fake",
+            log_dir=str(self.tmp_path / "logs"),
+            journal_dir=str(self.tmp_path / "journals"),
+            socket_path=str(self.tmp_path / "test2.sock"),
+        )
+        self.assertEqual(cfg_fake.adapter, "fake")
+        daemon_fake = CoreDaemon(cfg_fake)
+        self.assertIsInstance(daemon_fake.adapter, FakeWorkerAdapter)
+        self.assertEqual(daemon_fake.adapter.adapter_kind, "fake")
+
+        # Invalid adapter raises ValueError
+        with self.assertRaises(ValueError):
+            SystemConfig(adapter="nonexistent")
+
+    def test_fake_worker_adapter_has_unmistakable_marker(self):
+        """FakeWorkerAdapter summaries are visibly marked with [FAKE]."""
+        import asyncio
+        from multigravity.adapters.fake import FakeWorkerAdapter
+        from multigravity.validator import OutputContractValidator
+
+        fake = FakeWorkerAdapter()
+        res = asyncio.run(fake.run("worker-1", "Test prompt", 5.0))
+        self.assertTrue(res.success)
+        is_valid, contract, _ = OutputContractValidator.validate_and_parse(res.raw_output, 4000)
+        self.assertTrue(is_valid)
+        self.assertIsNotNone(contract)
+        self.assertTrue(contract.summary.startswith("[FAKE]"), f"Expected [FAKE] prefix, got: {contract.summary}")
+
+    def test_validator_unwraps_agy_response_envelope(self):
+        """OutputContractValidator unwraps JSON envelope with 'response' key from agy."""
+        import json
+        from multigravity.validator import OutputContractValidator
+
+        inner_contract = {
+            "summary": "Real summary text",
+            "key_findings": ["Point 1", "Point 2"],
+            "interface_spec_or_diff": None,
+            "sources": [],
+            "confidence": 0.95,
+            "open_questions": [],
+        }
+        envelope = {
+            "conversation_id": "test-conv-123",
+            "status": "SUCCESS",
+            "response": json.dumps(inner_contract),
+        }
+        envelope_str = json.dumps(envelope)
+
+        is_valid, contract, err = OutputContractValidator.validate_and_parse(envelope_str, 4000)
+        self.assertTrue(is_valid, f"Validation failed: {err}")
+        self.assertIsNotNone(contract)
+        self.assertEqual(contract.summary, "Real summary text")
+        self.assertEqual(contract.key_findings, ["Point 1", "Point 2"])
+
 
 if __name__ == "__main__":
     unittest.main()

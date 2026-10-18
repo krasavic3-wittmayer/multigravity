@@ -35,6 +35,7 @@ class SystemConfig:
     task_timeout_s: float = 120.0
     max_attempts: int = 3
     default_max_output_chars: int = 4000
+    adapter: str = "agy_cli"
     log_dir: str = "logs"
     journal_dir: str = "journals"
     socket_path: str = ""
@@ -45,6 +46,11 @@ class SystemConfig:
         return [w for w in self.workers if w.enabled]
 
     def __post_init__(self):
+        if self.adapter not in ("agy_cli", "fake"):
+            raise ValueError(
+                f"Unknown adapter '{self.adapter}', must be 'agy_cli' or 'fake'"
+            )
+
         if not self.socket_path:
             xdg_runtime = os.environ.get("XDG_RUNTIME_DIR")
             if xdg_runtime:
@@ -83,6 +89,7 @@ class SystemConfig:
             task_timeout_s=float(daemon_cfg.get("task_timeout_s", 120.0)),
             max_attempts=int(daemon_cfg.get("max_attempts", 3)),
             default_max_output_chars=int(daemon_cfg.get("default_max_output_chars", 4000)),
+            adapter=str(daemon_cfg.get("adapter", "agy_cli")),
             log_dir=str(daemon_cfg.get("log_dir", "logs")),
             journal_dir=str(daemon_cfg.get("journal_dir", "journals")),
             socket_path=str(daemon_cfg.get("socket_path", "")),
@@ -95,31 +102,4 @@ class SystemConfig:
         if not path.exists():
             raise FileNotFoundError(f"Configuration file not found: {path}")
         with open(path, "rb") as f:
-            data = tomllib.load(f)
-
-        daemon_cfg = data.get("daemon", {})
-        workers_cfg = data.get("workers", [])
-
-        workers = [
-            WorkerConfig(
-                id=w["id"],
-                label=w.get("label", w["id"]),
-                profile_dir=w.get("profile_dir", f"profiles/{w['id']}"),
-                enabled=w.get("enabled", True),
-                concurrency=w.get("concurrency", 1),
-            )
-            for w in workers_cfg
-        ]
-
-        return cls(
-            cooldown_base_s=float(daemon_cfg.get("cooldown_base_s", 5.0)),
-            cooldown_cap_s=float(daemon_cfg.get("cooldown_cap_s", 300.0)),
-            queue_deadline_s=float(daemon_cfg.get("queue_deadline_s", 60.0)),
-            task_timeout_s=float(daemon_cfg.get("task_timeout_s", 120.0)),
-            max_attempts=int(daemon_cfg.get("max_attempts", 3)),
-            default_max_output_chars=int(daemon_cfg.get("default_max_output_chars", 4000)),
-            log_dir=str(daemon_cfg.get("log_dir", "logs")),
-            journal_dir=str(daemon_cfg.get("journal_dir", "journals")),
-            socket_path=str(daemon_cfg.get("socket_path", "")),
-            workers=workers,
-        )
+            return cls.from_toml_string(f.read().decode("utf-8"))

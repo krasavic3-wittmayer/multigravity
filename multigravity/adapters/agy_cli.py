@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import signal
-import subprocess
+import uuid
 from pathlib import Path
 from typing import Any
 
 from multigravity.adapters.base import WorkerAdapter, WorkerResult
+from multigravity.isolation import EnvironmentAllowList
 from multigravity.models import ErrorCode
+from multigravity.probes import get_isolated_runner_prefix
 
 
 class AgyCliWorkerAdapter(WorkerAdapter):
     """Drives official agy CLI sub-agents with strict profile and process isolation."""
+
+    adapter_kind: str = "agy_cli"
 
     def __init__(self, agy_binary: str | None = None, base_worktree_dir: str | Path | None = None):
         self.agy_binary = agy_binary or shutil.which("agy") or "/usr/sbin/agy"
@@ -25,27 +30,7 @@ class AgyCliWorkerAdapter(WorkerAdapter):
 
     def _setup_worker_env(self, profile_dir: Path) -> dict[str, str]:
         """Configures isolated Linux profile environment with 0700 permissions."""
-        profile_dir = profile_dir.resolve()
-        home_dir = profile_dir / "home"
-        config_dir = profile_dir / "config"
-        data_dir = profile_dir / "data"
-        cache_dir = profile_dir / "cache"
-        state_dir = profile_dir / "state"
-        runtime_dir = profile_dir / "runtime"
-
-        for p in (home_dir, config_dir, data_dir, cache_dir, state_dir, runtime_dir):
-            p.mkdir(parents=True, exist_ok=True, mode=0o700)
-
-        env = os.environ.copy()
-        env["HOME"] = str(home_dir)
-        env["XDG_CONFIG_HOME"] = str(config_dir)
-        env["XDG_DATA_HOME"] = str(data_dir)
-        env["XDG_CACHE_HOME"] = str(cache_dir)
-        env["XDG_STATE_HOME"] = str(state_dir)
-        env["XDG_RUNTIME_DIR"] = str(runtime_dir)
-        # Avoid leaking parent terminal or session variables
-        env.pop("ANTIGRAVITY_CONVERSATION_ID", None)
-        return env
+        return EnvironmentAllowList.build_worker_env(profile_dir)
 
     async def run(
         self,
@@ -54,6 +39,8 @@ class AgyCliWorkerAdapter(WorkerAdapter):
         timeout_s: float,
         working_dir: str | None = None,
         profile_dir: str | Path | None = None,
+        inputs: Any = None,
+        mode: str | None = None,
     ) -> WorkerResult:
         if not Path(self.agy_binary).exists():
             return WorkerResult(
@@ -62,11 +49,27 @@ class AgyCliWorkerAdapter(WorkerAdapter):
                 error_message=f"agy binary not found at {self.agy_binary}",
             )
 
-        p_dir = Path(profile_dir or f"profiles/{worker_id}")
-        env = self._setup_worker_env(p_dir)
-        work_dir = working_dir or str(p_dir / "home")
+        p_dir = Path(profile_dir or f"profiles/{worker_id}").resolve()
+        runtime_dir = p_dir / "runtime"
+        runtime_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
-        cmd = [
+        env = EnvironmentAllowList.build_worker_env(p_dir)
+        prefix = get_isolated_runner_prefix(runtime_dir)
+
+        # Fresh scratch directory holding only inputs.json, cleaned up in finally
+        scratch_dir: Path | None = None
+        if working_dir:
+            work_dir = working_dir
+        else:
+            scratch_dir = p_dir / "tmp" / f"scratch_{uuid.uuid4().hex[:8]}"
+            scratch_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if inputs is not None:
+                inputs_path = scratch_dir / "inputs.json"
+                with open(inputs_path, "w", encoding="utf-8") as f:
+                    json.dump(inputs, f, indent=2)
+            work_dir = str(scratch_dir)
+
+        cmd = prefix + [
             self.agy_binary,
             "-p",
             prompt,
@@ -75,6 +78,7 @@ class AgyCliWorkerAdapter(WorkerAdapter):
             "--dangerously-skip-permissions",
         ]
 
+        proc = None
         try:
             # Spawn in a new process group (setsid) so all children can be reaped
             proc = await asyncio.create_subprocess_exec(
@@ -93,7 +97,6 @@ class AgyCliWorkerAdapter(WorkerAdapter):
             )
             stdout = stdout_bytes.decode("utf-8", errors="replace")
             stderr = stderr_bytes.decode("utf-8", errors="replace")
-
             combined = (stdout + " " + stderr).lower()
 
             # Check for Rate Limit signals
@@ -101,7 +104,7 @@ class AgyCliWorkerAdapter(WorkerAdapter):
                 return WorkerResult(
                     success=False,
                     error_code=ErrorCode.RATE_LIMITED.value,
-                    error_message=f"Rate limit signal detected: {stderr.strip()[:200]}",
+                    error_message=f"Rate limit signal detected: {stderr.strip()[:200] or stdout.strip()[:200]}",
                 )
 
             # Check for Auth / Session Expiry signals
@@ -112,12 +115,13 @@ class AgyCliWorkerAdapter(WorkerAdapter):
                 "unauthenticated",
                 "login required",
                 "authentication failed",
+                "you are not logged into antigravity",
             ]
             if any(sig in combined for sig in auth_sigs):
                 return WorkerResult(
                     success=False,
                     error_code=ErrorCode.AUTH_EXPIRED.value,
-                    error_message=f"Session expiry detected: {stderr.strip()[:200]}",
+                    error_message=f"Session expiry detected: {stderr.strip()[:200] or stdout.strip()[:200]}",
                 )
 
             if worker_id in self._cancelled_workers or proc.returncode in (-signal.SIGTERM, -signal.SIGKILL):
@@ -134,9 +138,26 @@ class AgyCliWorkerAdapter(WorkerAdapter):
                     error_message=f"CLI exited with status {proc.returncode}: {stderr.strip()[:300]}",
                 )
 
+            # Unwrap JSON response envelope from agy if present
+            raw_output = stdout.strip()
+            try:
+                data = json.loads(raw_output)
+                if isinstance(data, dict):
+                    if data.get("status") == "ERROR":
+                        err_msg = data.get("error", "agy returned error status")
+                        return WorkerResult(
+                            success=False,
+                            error_code=ErrorCode.TASK_FAILED.value,
+                            error_message=str(err_msg)[:300],
+                        )
+                    if "response" in data and isinstance(data["response"], str):
+                        raw_output = data["response"].strip()
+            except Exception:
+                pass
+
             return WorkerResult(
                 success=True,
-                raw_output=stdout,
+                raw_output=raw_output,
             )
 
         except asyncio.TimeoutError:
@@ -156,6 +177,14 @@ class AgyCliWorkerAdapter(WorkerAdapter):
         finally:
             self._running_procs.pop(worker_id, None)
             self._cancelled_workers.discard(worker_id)
+            if scratch_dir and scratch_dir.exists():
+                shutil.rmtree(scratch_dir, ignore_errors=True)
+            if proc and proc.pid:
+                try:
+                    pgid = os.getpgid(proc.pid)
+                    os.killpg(pgid, signal.SIGTERM)
+                except (ProcessLookupError, OSError):
+                    pass
 
     async def cancel(self, worker_id: str):
         """Kills the entire process group cleanly to prevent orphan processes."""
@@ -163,12 +192,10 @@ class AgyCliWorkerAdapter(WorkerAdapter):
         proc = self._running_procs.get(worker_id)
         if proc and proc.returncode is None:
             try:
-                # Terminate the process group
                 pgid = os.getpgid(proc.pid)
                 os.killpg(pgid, signal.SIGTERM)
-                # Wait briefly for process to exit
                 try:
-                    await asyncio.wait_for(proc.wait(), timeout=1.0)
+                    await asyncio.wait_for(proc.wait(), timeout=1.5)
                 except asyncio.TimeoutError:
                     os.killpg(pgid, signal.SIGKILL)
                     await proc.wait()
@@ -177,18 +204,24 @@ class AgyCliWorkerAdapter(WorkerAdapter):
 
     async def probe(self, worker_id: str, profile_dir: str | Path | None = None) -> bool:
         """Cheap probe running 'agy models' to test connectivity and credentials."""
-        p_dir = Path(profile_dir or f"profiles/{worker_id}")
-        env = self._setup_worker_env(p_dir)
+        p_dir = Path(profile_dir or f"profiles/{worker_id}").resolve()
+        runtime_dir = p_dir / "runtime"
+        runtime_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        env = EnvironmentAllowList.build_worker_env(p_dir)
+        prefix = get_isolated_runner_prefix(runtime_dir)
+        cmd = prefix + [self.agy_binary, "models"]
         try:
             proc = await asyncio.create_subprocess_exec(
-                self.agy_binary,
-                "models",
+                *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
                 start_new_session=True,
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-            return proc.returncode == 0
+            combined = (
+                stdout.decode("utf-8", errors="replace") + " " + stderr.decode("utf-8", errors="replace")
+            ).lower()
+            return proc.returncode == 0 and "gemini" in combined
         except Exception:
             return False

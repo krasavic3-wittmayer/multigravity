@@ -205,7 +205,11 @@ class Dispatcher:
         return True
 
     def list_workers(self) -> list[dict[str, Any]]:
-        return self.registry.list_workers()
+        workers = self.registry.list_workers()
+        adapter_kind = getattr(self.adapter, "adapter_kind", "unknown")
+        for w in workers:
+            w["adapter"] = adapter_kind
+        return workers
 
     async def _run_dispatch_loop(self):
         """Continuously dispatches queued tasks to idle workers."""
@@ -274,7 +278,13 @@ class Dispatcher:
         task.assigned_at = now
         self.journal.save_task(task)
         self.registry.mark_busy(worker_id)
-        self.logger.task_assigned(task.task_id, worker_id, worker_label, task.attempt)
+        self.logger.task_assigned(
+            task.task_id,
+            worker_id,
+            worker_label,
+            task.attempt,
+            adapter=getattr(self.adapter, "adapter_kind", "unknown"),
+        )
 
         self._task_worker_map[task.task_id] = worker_id
         worker_task = asyncio.create_task(self._execute_task_on_worker(task, worker_id))
@@ -291,10 +301,15 @@ class Dispatcher:
             )
 
             # Execute via adapter
+            worker = self.registry.get_worker(worker_id)
+            p_dir = worker.profile_dir if worker else None
             worker_res: WorkerResult = await self.adapter.run(
                 worker_id=worker_id,
                 prompt=prompt,
                 timeout_s=self.config.task_timeout_s,
+                profile_dir=p_dir,
+                inputs=task.inputs,
+                mode=task.mode,
             )
 
             await self._handle_worker_result(task, worker_id, worker_res)
@@ -388,7 +403,11 @@ class Dispatcher:
         task.result = contract.to_dict()
         task.error = None
         self.journal.save_task(task)
-        self.logger.task_done(task.task_id, task.completed_at - (task.assigned_at or task.created_at))
+        self.logger.task_done(
+            task.task_id,
+            task.completed_at - (task.assigned_at or task.created_at),
+            adapter=getattr(self.adapter, "adapter_kind", "unknown"),
+        )
 
     async def _attempt_repair_pass(
         self, task: Task, worker_id: str, previous_output: str, reason: str
@@ -396,10 +415,15 @@ class Dispatcher:
         repair_prompt = OutputContractValidator.build_repair_prompt(
             previous_output, reason, task.max_output_chars
         )
+        worker = self.registry.get_worker(worker_id)
+        p_dir = worker.profile_dir if worker else None
         repair_res = await self.adapter.run(
             worker_id=worker_id,
             prompt=repair_prompt,
             timeout_s=self.config.task_timeout_s,
+            profile_dir=p_dir,
+            inputs=task.inputs,
+            mode=task.mode,
         )
         if not repair_res.success:
             return None

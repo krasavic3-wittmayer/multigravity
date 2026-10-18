@@ -174,7 +174,10 @@ class LoginWizard:
         print("\n" + "=" * 78)
         print("                        MULTIGRAVITY WORKER STATUS")
         if self.config_path:
-            print(f" Config: {self.config_path}")
+            adapter_str = f" (adapter: {self.config.adapter})"
+            print(f" Config: {self.config_path}{adapter_str}")
+            if self.config.adapter == "fake":
+                print(" [WARNING: FAKE WORKER ADAPTER ACTIVE - NOT REAL ACCOUNTS]")
         print("=" * 78)
         print(f"{'WORKER (ACCOUNT)':<26} {'STATE':<14} {'IDENTITY':<18} {'VERIFIED'}")
         print("-" * 78)

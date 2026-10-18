@@ -165,9 +165,8 @@ class Doctor:
         for f in dir_path.rglob("*"):
             rel = str(f.relative_to(dir_path))
             if (
-                rel.startswith("antigravity-cli/brain/")
-                or rel.startswith("antigravity-cli/conversations/")
-                or rel.startswith("antigravity-cli/log/")
+                rel == "antigravity-cli"
+                or rel.startswith("antigravity-cli/")
                 or rel.endswith(".log")
                 or rel.endswith("-wal")
                 or rel.endswith("-shm")

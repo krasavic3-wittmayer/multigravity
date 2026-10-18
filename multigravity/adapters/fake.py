@@ -25,6 +25,8 @@ class WorkerFaultRule:
 class FakeWorkerAdapter(WorkerAdapter):
     """Mock worker adapter for unit testing, concurrency verification, and fault recovery."""
 
+    adapter_kind: str = "fake"
+
     def __init__(self):
         self.rules: dict[str, WorkerFaultRule] = {}
         self.running_tasks: dict[str, asyncio.Task] = {}
@@ -70,6 +72,9 @@ class FakeWorkerAdapter(WorkerAdapter):
         prompt: str,
         timeout_s: float,
         working_dir: str | None = None,
+        profile_dir: str | None = None,
+        inputs: Any = None,
+        mode: str | None = None,
     ) -> WorkerResult:
         self.execution_counts[worker_id] = self.execution_counts.get(worker_id, 0) + 1
         rule = self.rules.get(worker_id, WorkerFaultRule())
@@ -129,7 +134,7 @@ class FakeWorkerAdapter(WorkerAdapter):
 
         if rule.oversized_length is not None:
             contract = OutputContract(
-                summary="A" * rule.oversized_length,
+                summary="[FAKE] " + "A" * rule.oversized_length,
                 key_findings=["Finding 1"],
             )
             return WorkerResult(
@@ -139,7 +144,7 @@ class FakeWorkerAdapter(WorkerAdapter):
 
         # Default valid response
         contract = OutputContract(
-            summary=f"Task executed successfully by {worker_id}",
+            summary=f"[FAKE] Task executed successfully by {worker_id}",
             key_findings=["Worker executed prompt", "Contract schema verified"],
             confidence=0.99,
         )

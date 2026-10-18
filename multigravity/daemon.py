@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from multigravity.adapters.agy_cli import AgyCliWorkerAdapter
 from multigravity.adapters.base import WorkerAdapter
 from multigravity.adapters.fake import FakeWorkerAdapter
 from multigravity.config import SystemConfig
@@ -31,7 +32,12 @@ class CoreDaemon:
         self.journal = JournalStore(config.journal_dir)
         self.logger = StructuredLogger(config.log_dir)
         self.registry = WorkerRegistry(config.workers)
-        self.adapter = adapter or FakeWorkerAdapter()
+        if adapter is not None:
+            self.adapter = adapter
+        elif config.adapter == "fake":
+            self.adapter = FakeWorkerAdapter()
+        else:
+            self.adapter = AgyCliWorkerAdapter()
 
         self.dispatcher = Dispatcher(
             config=self.config,
@@ -82,7 +88,13 @@ class CoreDaemon:
         """Starts core daemon subsystems."""
         await self.dispatcher.start()
         await self.ipc_server.start()
-        self.logger.log_event("daemon_started", details={"socket": self.config.socket_path})
+        self.logger.log_event(
+            "daemon_started",
+            details={
+                "socket": self.config.socket_path,
+                "adapter": getattr(self.adapter, "adapter_kind", "unknown"),
+            },
+        )
 
     async def stop(self):
         """Gracefully stops daemon subsystems and cleans up resources."""

@@ -17,6 +17,9 @@ max_attempts = 3
 # Default character cap for the compressed JSON result
 default_max_output_chars = 4000
 
+# Worker execution adapter: "agy_cli" (default for real use) or "fake" (for testing)
+adapter = "agy_cli"
+
 # Persistence & logging paths
 log_dir = "logs"
 journal_dir = "journals"
