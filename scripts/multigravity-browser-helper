@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# multigravity-browser-helper - Intercepts browser launch to display OAuth URL prominently
+set -euo pipefail
+
+URL="${1:-}"
+if [ -z "$URL" ]; then
+    exit 0
+fi
+
+echo ""
+echo "================================================================================"
+echo "                   GOOGLE ACCOUNT AUTHENTICATION REQUIRED                       "
+echo "================================================================================"
+echo "Open the following URL in an incognito/private browser window, or in the browser"
+echo "profile specifically associated with THIS worker account:"
+echo ""
+echo "  $URL"
+echo ""
+echo "CRITICAL: If your browser is already signed into your main account or another"
+echo "worker account, click 'Use another account' to avoid a credential collision."
+echo "================================================================================"
+echo ""
+
+# Try launching incognito browser if DISPLAY or WAYLAND_DISPLAY is present and launch not disabled
+if [ "${MULTIGRAVITY_BROWSER_LAUNCH:-1}" != "0" ] && [ "${MULTIGRAVITY_BROWSER_LAUNCH:-1}" != "no" ]; then
+    if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        if command -v google-chrome >/dev/null 2>&1; then
+            google-chrome --incognito "$URL" >/dev/null 2>&1 &
+        elif command -v brave >/dev/null 2>&1; then
+            brave --incognito "$URL" >/dev/null 2>&1 &
+        elif command -v firefox >/dev/null 2>&1; then
+            firefox --private-window "$URL" >/dev/null 2>&1 &
+        fi
+    fi
+else
+    echo "[INFO] Browser launch skipped (MULTIGRAVITY_BROWSER_LAUNCH=0)."
+fi
+
+exit 0
