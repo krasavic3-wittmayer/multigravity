@@ -61,8 +61,16 @@ Phase 6 Complete: Preflight, Real Keyring Smoke Verification, Leak Audit & Owner
   - Implemented dynamic `two-worker collision` test in `multigravity/doctor.py`: reports `[SIMULATED]` when fewer than 2 workers are logged in, and runs `[REAL]` when 2 or more workers are verified (snapshots host keyring and `~/.gemini`, fingerprints worker credential dirs with SHA-256 before/after alternating live probes, checks distinct identities, and verifies zero host modification).
   - Updated `docs/LOGIN_RUNBOOK.md` to match the exact 8-step sequential onboarding flow and documented `ssh-add` as optional for runbook execution.
 
+- **Phase 8 Worker Scaling, Disabled Worker Isolation & TUI Guidance**:
+  - Identified cause of ghost worker: `LoginWizard`, `Doctor`, and `cmd_login` iterated over `config.workers` without filtering by `w.enabled`, causing disabled workers (`enabled = false`) to be probed and offered for login.
+  - Enforced active configuration as the sole source of truth: removed workers vanish from all commands; disabled workers are displayed as `DISABLED` in the status board, are never probed, never offered for login, and never block wizard completion or daemon launch.
+  - Verified 1–3 worker boundary rules: configs with 2 workers pass validation and preflight, and Doctor runs the two-worker collision check as `REAL` as soon as 2 workers are verified.
+  - Documented `enabled` flag and 2-worker scaling in `config.example.toml` and `docs/LOGIN_RUNBOOK.md`.
+  - Added prominent banner before TUI launch instructing users not to enter prompts and to exit via `/quit` or `Ctrl-D` once signed in.
+  - Created `tests/test_worker_scenarios.py` covering 2-worker setups, disabled workers, removed workers with stale state, and daemon startup (51/51 tests passing).
+
 ## In Progress
-- Staging and committing verified pre-login changes.
+- Final report for the owner.
 
 ## Next
-- Owner executes the 8-step interactive sequence in `docs/LOGIN_RUNBOOK.md` to register Account 1 and authenticate Accounts 2–4.
+- Owner runs `python3 -m multigravity.cli` to start the background daemon, or `python3 -m multigravity.cli status` / `doctor`.

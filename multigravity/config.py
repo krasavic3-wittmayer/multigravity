@@ -40,6 +40,10 @@ class SystemConfig:
     socket_path: str = ""
     workers: list[WorkerConfig] = field(default_factory=list)
 
+    @property
+    def enabled_workers(self) -> list[WorkerConfig]:
+        return [w for w in self.workers if w.enabled]
+
     def __post_init__(self):
         if not self.socket_path:
             xdg_runtime = os.environ.get("XDG_RUNTIME_DIR")

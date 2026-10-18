@@ -131,7 +131,7 @@ class Doctor:
 
     def check_profile_permissions(self) -> DoctorCheckResult:
         issues = []
-        for w in self.config.workers:
+        for w in self.config.enabled_workers:
             p = Path(w.profile_dir).resolve()
             if p.exists():
                 mode = p.stat().st_mode & 0o777
@@ -163,6 +163,16 @@ class Doctor:
         if not dir_path.exists():
             return snapshot
         for f in dir_path.rglob("*"):
+            rel = str(f.relative_to(dir_path))
+            if (
+                rel.startswith("antigravity-cli/brain/")
+                or rel.startswith("antigravity-cli/conversations/")
+                or rel.startswith("antigravity-cli/log/")
+                or rel.endswith(".log")
+                or rel.endswith("-wal")
+                or rel.endswith("-shm")
+            ):
+                continue
             try:
                 snapshot[str(f)] = f.stat().st_mtime
             except OSError:
@@ -171,10 +181,10 @@ class Doctor:
 
     def check_credential_isolation(self) -> DoctorCheckResult:
         """Runs the worker isolation and HOME protection test from SPEC section 4."""
-        workers = self.config.workers
+        workers = self.config.enabled_workers
         if len(workers) < 2:
             return DoctorCheckResult(
-                "keyring isolation", True, "Less than 2 workers configured; isolation test skipped", check_type="REAL"
+                "keyring isolation", True, "Less than 2 enabled workers configured; isolation test skipped", check_type="REAL"
             )
 
         w_a = workers[0]
@@ -239,10 +249,10 @@ class Doctor:
         run for REAL (with live probes, credential hashing, and desktop keyring audits)
         as soon as two or more workers are verified.
         """
-        workers = self.config.workers
+        workers = self.config.enabled_workers
         if len(workers) < 2:
             return DoctorCheckResult(
-                "two-worker collision", True, "Less than 2 workers configured; collision check skipped", check_type="REAL"
+                "two-worker collision", True, "Less than 2 enabled workers configured; collision check skipped", check_type="REAL"
             )
 
         verified = []

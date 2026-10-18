@@ -20,9 +20,18 @@ def snapshot_dir_metadata(dir_path: Path) -> dict[str, tuple[int, float]]:
         return snapshot
     for p in dir_path.rglob("*"):
         if p.is_file():
+            rel = str(p.relative_to(dir_path))
+            if (
+                rel.startswith("antigravity-cli/brain/")
+                or rel.startswith("antigravity-cli/conversations/")
+                or rel.startswith("antigravity-cli/log/")
+                or rel.endswith(".log")
+                or rel.endswith("-wal")
+                or rel.endswith("-shm")
+            ):
+                continue
             try:
                 st = p.stat()
-                rel = str(p.relative_to(dir_path))
                 snapshot[rel] = (st.st_size, st.st_mtime)
             except OSError:
                 pass

@@ -25,6 +25,16 @@ journal_dir = "journals"
 # socket_path = "/run/user/1000/multigravity.sock"
 
 # Worker configurations (Strict boundary: 1 to 3 background accounts; Account 1 is main agent)
+# You can run with 1, 2, or 3 background workers.
+#
+# If you only have two worker accounts (Accounts 2 & 3), you can either:
+#   1. Set `enabled = false` on worker-3, OR
+#   2. Remove the [[workers]] block for worker-3 entirely.
+#
+# A disabled worker is shown as DISABLED in status, is never probed, is never offered
+# for login, and does not block the wizard from completing or the daemon from starting.
+# To add the third worker later: set `enabled = true` and run `multigravity login worker-3`.
+
 [[workers]]
 id = "worker-1"
 label = "Account 2 (Research & Docs)"
@@ -43,5 +53,5 @@ concurrency = 1
 id = "worker-3"
 label = "Account 4 (General Background)"
 profile_dir = "/home/michal/.multigravity/workers/worker-3"
-enabled = true
+enabled = false
 concurrency = 1

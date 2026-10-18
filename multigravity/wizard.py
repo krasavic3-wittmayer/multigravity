@@ -116,19 +116,33 @@ class LoginWizard:
         """Runs preflight checks: agy binary, system isolation tools, valid config, worker count, path guard."""
         verify_dependencies_or_raise(self.agy_binary)
 
-        if not self.config.workers or len(self.config.workers) < 1 or len(self.config.workers) > 3:
+        enabled = self.config.enabled_workers
+        if not enabled or len(enabled) < 1 or len(enabled) > 3:
             raise ValueError(
-                f"Configuration must define between 1 and 3 workers (Accounts 2-4), found {len(self.config.workers)}"
+                f"Configuration must define between 1 and 3 enabled workers (Accounts 2-4), found {len(enabled)}"
             )
 
-        # Enforce PathGuard on all worker profile paths
+        # Enforce PathGuard on all configured worker profile paths
         paths = [w.profile_dir for w in self.config.workers]
         PathGuard.validate_worker_profiles(paths)
 
     def get_status_board(self) -> list[dict[str, Any]]:
-        """Returns current status board data for all workers."""
+        """Returns current status board data for all configured workers."""
         board = []
         for w in self.config.workers:
+            if not w.enabled:
+                board.append({
+                    "id": w.id,
+                    "label": w.label,
+                    "display_name": format_worker_display(w.id, w.label),
+                    "profile_dir": w.profile_dir,
+                    "state": "DISABLED",
+                    "masked_identity": "-",
+                    "last_verified_at": None,
+                    "detail": "Worker is disabled in configuration",
+                })
+                continue
+
             mgr = WorkerProfileManager(w.profile_dir)
             meta = mgr.load_metadata()
 
@@ -168,15 +182,21 @@ class LoginWizard:
             v_time = (
                 time.strftime("%Y-%m-%d %H:%M", time.localtime(item["last_verified_at"]))
                 if item["last_verified_at"]
-                else "Never"
+                else "-"
             )
-            acc = item["masked_identity"] or "None"
+            acc = item["masked_identity"] or "-"
             print(f"{item['display_name']:<26} {item['state']:<14} {acc:<18} {v_time}")
         print("=" * 78 + "\n")
 
     def run_wizard(self, target_worker_id: str | None = None) -> bool:
         """Runs the interactive sequential login wizard."""
         self.preflight()
+
+        if target_worker_id:
+            target_worker = next((w for w in self.config.workers if w.id == target_worker_id), None)
+            if target_worker and not target_worker.enabled:
+                print(f"[!] Worker '{target_worker_id}' is disabled in configuration.")
+                return False
 
         # Check Account 1 identity to ensure collision prevention
         main_id = load_main_identity(self.state_dir)
@@ -206,6 +226,8 @@ class LoginWizard:
 
             workers_to_login = []
             for w in self.config.workers:
+                if not w.enabled:
+                    continue
                 if target_worker_id and w.id != target_worker_id:
                     continue
                 mgr = WorkerProfileManager(w.profile_dir)
@@ -217,7 +239,7 @@ class LoginWizard:
                 workers_to_login.append(w)
 
             if not workers_to_login:
-                print("All configured workers are verified and ready!")
+                print("All configured enabled workers are verified and ready!")
                 return True
 
             for w in workers_to_login:
@@ -247,6 +269,16 @@ class LoginWizard:
         print("• If your browser is already signed into your main account, Google will often auto-select it.")
         print("• When the browser window opens, look closely at the active profile or select 'Use another account'.")
         print("• The login URL will be displayed below so you can also copy-paste it into a Private/Incognito window.\n")
+
+        print("=" * 78)
+        print("ANTIGRAVITY TUI LOGIN INSTRUCTIONS:")
+        print("1. The Antigravity TUI will launch now and open the Google sign-in page.")
+        print("2. Complete Google login in your browser for this worker account.")
+        print("3. DO NOT enter any prompts in the Antigravity TUI.")
+        print("4. Once signed in, exit the TUI immediately: type '/quit' or press [Ctrl-D].")
+        print("5. After you exit the TUI, this wizard will automatically verify the login")
+        print("   and proceed to the next step.")
+        print("=" * 78 + "\n")
 
         input("Press [Enter] to begin login for this worker...")
 
@@ -352,9 +384,9 @@ class LoginWizard:
         if main_id and is_main_account_match(norm_email, main_id):
             return True, "Main Account (Account 1)"
 
-        # Check against all other workers
+        # Check against all other enabled workers
         for w in self.config.workers:
-            if w.id == current_worker_id:
+            if w.id == current_worker_id or not w.enabled:
                 continue
             mgr = WorkerProfileManager(w.profile_dir)
             meta = mgr.load_metadata()

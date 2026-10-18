@@ -113,10 +113,15 @@ def cmd_set_main_identity(config: SystemConfig, config_path: Path) -> int:
 
 
 def cmd_login(config: SystemConfig, config_path: Path, worker_id: str) -> int:
-    valid_ids = [w.id for w in config.workers]
-    worker_displays = [format_worker_display(w.id, w.label) for w in config.workers]
-    if worker_id not in valid_ids:
+    worker = next((w for w in config.workers if w.id == worker_id), None)
+    if not worker:
+        worker_displays = [format_worker_display(w.id, w.label) for w in config.workers]
         print(f"Error: Unknown worker ID '{worker_id}'. Configured workers: {', '.join(worker_displays)}")
+        return 1
+
+    if not worker.enabled:
+        print(f"Error: Worker '{worker_id}' is disabled in configuration ({config_path}).")
+        print(f"To log in this worker, set 'enabled = true' in {config_path}.")
         return 1
 
     try:
