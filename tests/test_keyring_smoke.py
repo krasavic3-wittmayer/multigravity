@@ -28,6 +28,9 @@ def snapshot_dir_metadata(dir_path: Path) -> dict[str, tuple[int, float]]:
                 or rel.endswith(".log")
                 or rel.endswith("-wal")
                 or rel.endswith("-shm")
+                or rel.endswith(".pb")
+                or rel.endswith(".db")
+                or rel.endswith("history.jsonl")
             ):
                 continue
             try:
