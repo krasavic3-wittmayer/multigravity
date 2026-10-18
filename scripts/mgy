@@ -22,7 +22,11 @@ Usage:
   mgy login [worker]   Log in worker accounts interactively
   mgy stop             Stop background core daemon
 
+Notes:
+  - All tool calls, MCP actions, and shell commands are auto-approved without prompting.
+  - To require manual confirmation, set MGY_NO_SKIP_PERMISSIONS=1 or pass --no-skip-permissions.
 EOF
+
     exit 0
 fi
 
@@ -73,27 +77,39 @@ cleanup_fleet() {
 }
 trap cleanup_fleet EXIT INT TERM HUP
 
-# 3. Launch interactive agy with prompt and remote control enabled
+# 3. Launch interactive agy with prompt, remote control, and auto-approved permissions
 REMOTE_CTRL_FLAG="--remote-control"
+SKIP_PERMS_FLAG="--dangerously-skip-permissions"
+
+if [[ "${MGY_NO_SKIP_PERMISSIONS:-0}" == "1" ]] || [[ " $* " =~ " --no-skip-permissions " ]]; then
+    SKIP_PERMS_FLAG=""
+fi
+
+AUTO_FLAGS=()
+[ -n "$REMOTE_CTRL_FLAG" ] && AUTO_FLAGS+=("$REMOTE_CTRL_FLAG")
+[ -n "$SKIP_PERMS_FLAG" ] && AUTO_FLAGS+=("$SKIP_PERMS_FLAG")
 
 if [ $# -eq 0 ]; then
-    # No arguments: launch with fleet orchestration prompt and remote control
-    "$AGY_BIN" "$REMOTE_CTRL_FLAG" -i "$PROMPT_OUTPUT"
+    # No arguments: launch with fleet prompt, remote control, and auto-approved permissions
+    "$AGY_BIN" "${AUTO_FLAGS[@]}" -i "$PROMPT_OUTPUT"
 elif [[ "${1:-}" == -* ]]; then
-    # User passed flags (e.g. -c, --mode plan): include --remote-control if not present
-    if [[ " $* " =~ " --remote-control " ]]; then
-        "$AGY_BIN" "$@"
-    else
-        "$AGY_BIN" "$REMOTE_CTRL_FLAG" "$@"
-    fi
+    # User passed flags (e.g. -c, --mode plan): include auto flags if not present
+    CMD_ARGS=()
+    for flag in "${AUTO_FLAGS[@]}"; do
+        if [[ ! " $* " =~ " $flag " ]]; then
+            CMD_ARGS+=("$flag")
+        fi
+    done
+    "$AGY_BIN" "${CMD_ARGS[@]}" "$@"
 else
-    # User passed a text prompt: combine fleet prompt with user prompt and remote control
+    # User passed a text prompt: combine fleet prompt with user prompt and auto flags
     USER_PROMPT="$1"
     shift
-    "$AGY_BIN" "$REMOTE_CTRL_FLAG" -i "$PROMPT_OUTPUT
+    "$AGY_BIN" "${AUTO_FLAGS[@]}" -i "$PROMPT_OUTPUT
 
 ---
 User Request:
 $USER_PROMPT" "$@"
 fi
+
 
