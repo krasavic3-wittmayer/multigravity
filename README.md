@@ -1,180 +1,280 @@
 # multigravity
 
-`multigravity` is a lightweight local orchestration layer between one interactive main agent (Account 1) and 1–3 background sub-agents (Accounts 2–4), each running on a separate paid Google AI Pro account.
+**One agent wasn't enough. So I got four.**
 
-The system offloads heavy, read-mostly tasks (deep research, reading tens of KB of documentation, test generation, and code review) to idle sub-agents through a local daemon and Model Context Protocol (MCP) shim, returning only compressed, schema-bound results to keep the main agent's context clean and responsive.
+A local AI agent orchestrator. Python, Linux, zero third-party dependencies, questionable life choices.
 
----
+- I use Arch, btw.
+- This is all vibecoded, btw. I haven't touched the code at all.
+- Yes, I made AI agents build a system for coordinating AI agents. No, I don't see a problem here.
 
-## Architecture
+Research, documentation, tests, code reviews — delegate the boring stuff, keep the main agent's context clean, and let the workers cook.
 
-The system is deliberately split into two decoupled components so that killing, restarting, or disconnecting the MCP client/shim never terminates background worker jobs:
+**100% vibes. 0% manually written code.**
 
-```
-+-----------------------------------------------------------+
-|              Interactive Main Agent (Account 1)           |
-+-----------------------------------------------------------+
-                             |
-                   MCP JSON-RPC (stdio)
-                             v
-+-----------------------------------------------------------+
-|                 MCP Shim (thin, stateless)                |
-+-----------------------------------------------------------+
-                             |
-            Unix Domain Socket ($XDG_RUNTIME_DIR)
-                             v
-+-----------------------------------------------------------+
-|               Core Daemon (long-lived, Linux)             |
-|  - Task Queue (FIFO)          - Worker Registry & LRU     |
-|  - Journal & Crash Recovery   - Context Funnel & Validator|
-|  - 429 Cooldown / Backoff     - Structured Event Logger   |
-+-----------------------------------------------------------+
-          |                         |                     |
-     agy CLI (0700)            agy CLI (0700)        agy CLI (0700)
-          v                         v                     v
-+-------------------+     +-------------------+ +-------------------+
-|  SubAgent 1 (Acc2) |     |  SubAgent 2 (Acc3) | |  SubAgent 3 (Acc4) |
-+-------------------+     +-------------------+ +-------------------+
+## Architecture (I use Arch, btw)
+
+```text
+                   Main Agent
+                       |
+                  "do the thing"
+                       |
+                    MCP shim
+                       |
+                   Unix socket
+                       |
+               multigravity daemon
+                 /      |      \
+                /       |       \
+           Worker 1  Worker 2  Worker 3
+              |         |         |
+           Account 2 Account 3 Account 4
+
+        4 accounts. 1 questionable life choice.
 ```
 
-1. **Core Daemon (`multigravity-daemon`)**:
-   - Long-lived background process running under the user's Linux session.
-   - Manages the FIFO task queue, dispatcher, worker state machines (`IDLE`, `BUSY`, `COOLDOWN`, `AUTH_EXPIRED`, `DISABLED`), crash recovery journal, and structured event logs.
-2. **MCP Shim (`multigravity-mcp-shim`)**:
-   - Thin, stateless stdio adapter spawned by the main agent's MCP client.
-   - Translates MCP tool calls into Unix Domain Socket requests (`mode 0600`).
-   - If the shim process is killed mid-task, tasks in the daemon continue uninterrupted.
-3. **Context Funnel**:
-   - Enforces strict output contract schemas (`summary`, `key_findings`, `interface_spec_or_diff`, `sources`, `confidence`, `open_questions`).
-   - Hard character cap (`max_output_chars`, default 4000).
-   - One automatic repair/compression pass on contract violation; raw transcripts are saved to disk and never dumped into the main agent's context.
+The architecture is split into two processes, because apparently even my AI agents need process isolation.
 
----
+- **`multigravity-daemon`** — queues tasks, manages workers, handles cooldowns, recovers after crashes, and generally makes sure the entire operation doesn't collapse because one subprocess had a bad day.
+- **`multigravity-mcp-shim`** — a thin, stateless bridge between the main agent and the daemon. Kill it. Restart it. Blame it for your problems. The background jobs will keep running anyway.
 
-## Hard Boundaries & Rules
+The daemon handles the actual work. The shim just delivers messages.
 
-- **Account Limits**: Strictly 2–4 accounts total (Account 1 is dedicated to the main agent; up to 3 worker accounts).
-- **No Token Tracking**: No token counting, burn-down, or budgets. The system designs strictly for per-account concurrency, RPM limits, and wall-clock parallelization.
-- **No Heavy Infrastructure**: Zero external database servers, no message brokers, no web UI. Pure Python standard library (zero third-party dependencies).
-- **Official Interfaces Only**: Workers run via the official `/usr/sbin/agy` CLI in isolated profiles. No spoofing or reverse-engineered endpoints.
+Separation of concerns? More like separation of things that can break.
 
----
+For the detailed subsystem architecture diagram, socket permission requirements, and failure isolation boundaries, see the [Technical Reference Manual](docs/TECHNICAL_REFERENCE.md).
 
-## MCP Tool Surface
+## Why does this exist?
 
-The main agent interacts with `multigravity` via 6 fast tools (all return < 1s):
+Because apparently having an AI agent write code wasn't complicated enough. Now we need an AI agent to tell other AI agents to read documentation so the first AI agent doesn't have to.
 
-| Tool | Parameters | Description |
-|---|---|---|
-| `submit_task` | `kind`, `instruction`, `inputs`, `output_spec`, `max_output_chars`, `mode` | Enqueues a background task and returns `task_id` immediately. |
-| `get_status` | `task_ids` | Queries task state (`QUEUED`, `RUNNING`, `DONE`, `FAILED`, `CANCELLED`), attempt count, and worker label. |
-| `get_result` | `task_id` | Fetches the compressed, schema-bound result for a completed task. |
-| `wait` | `task_ids`, `timeout_s` | Waits until tasks complete or timeout expires. Hard-capped at 25s so MCP tool-call timeouts are never reached. |
-| `cancel_task` | `task_id` | Cancels an in-flight or queued task, killing the worker process group. |
-| `list_workers` | *(none)* | Diagnostic tool showing worker health, current state, and cooldown countdowns. |
+And honestly? It makes sense.
 
----
+- **Parallel work.** Three workers can handle independent tasks while the main agent works on the actual project.
+- **Less context pollution.** Workers return compact, structured results instead of their entire thought process and a small novel about the contents of `README.md`.
+- **Crash recovery.** The daemon keeps track of unfinished tasks. The MCP client can disappear without taking the entire workforce with it.
+- **Rate-limit handling.** Workers cool down when they hit HTTP 429s. Eligible tasks can be retried elsewhere.
+- **Local-first.** Everything runs on your machine. No Redis, no PostgreSQL, no Kubernetes cluster that costs more to maintain than the project deserves.
 
-## Quick Start with `mgy` & `install.sh`
+The bottleneck isn't always intelligence. Sometimes it's just one agent trying to do twelve things at once.
 
-The fastest way to install and operate Multigravity is via `install.sh` and the `mgy` unified launcher:
+## Design principles (yes, I have those)
+
+- **One main account, up to three worker accounts.** Four accounts total. This is an orchestrator, not a cryptocurrency mining operation.
+- **Zero third-party Python dependencies.** If the standard library can do it, it probably should. `pip install -r requirements.txt` would be embarrassing when there is no requirements file.
+- **No token accounting.** No token burn-down charts, no budget dashboards, no pretending that a graph makes the model cheaper. Schedule around concurrency, rate limits, and time.
+- **Official interfaces only.** Workers use the official `agy` CLI. No reverse-engineered endpoints, no API cosplay.
+- **Linux-native.** Unix sockets, isolated D-Bus sessions, private keyrings. Windows users can enjoy their own adventures.
+- **No web UI.** It's a local daemon, not a SaaS startup looking for its first round of funding.
+
+Keep the implementation small. Keep the agents busy. Keep the yak shaving under control.
+
+*(The yak is currently being shaved by another agent.)*
+
+## Quick start
 
 ```bash
-# 1. Run the one-step installer
+# Clone the repo, obviously
+git clone <repo-url>
+cd multigravity
+
+# Install the thing
 ./install.sh
 
-# 2. Launch the interactive Main Agent with fleet orchestration & subagent awareness
+# Launch the agent fleet
 mgy
 
-# Or launch with an initial task prompt:
+# Or give the main agent a task
 mgy "analyze the dependencies in this project"
 
-# Monitor, diagnose, or stop:
+# Observe the consequences of your actions
 mgy status
 mgy doctor
+
+# Enough distributed systems for today
 mgy stop
 ```
 
-`mgy` automatically performs self-healing preflight, verifies worker logins, ensures the core background daemon is running, and injects the Main Agent with the active fleet prompt and subagent delegation instructions.
+`mgy` is the unified launcher. It handles preflight checks, worker login verification, daemon startup, and injecting the main agent with the instructions needed to delegate work.
 
----
+Basically, `mgy` does the boring setup so you can focus on making the AI do your homework. Professionally, of course.
 
-## Setup & Running
+## Setup
 
-### 1. Requirements
+### Requirements
+
 - Linux (x86_64 or aarch64)
-- Python 3.12+ (Python 3.14 recommended, zero third-party dependencies required)
-- Google Antigravity CLI (`agy`) installed at `/usr/sbin/agy`
-- Desktop keyring isolation tools (`dbus-run-session`, `gnome-keyring-daemon`, `secret-tool`)
+- Python 3.12+ (3.14 recommended, because apparently even Python needs rolling releases)
+- Google Antigravity CLI at `/usr/sbin/agy`
+- `dbus-run-session`
+- `gnome-keyring-daemon`
+- `secret-tool`
 
-### 2. Configure Workers
-Copy the example configuration:
+If you run Arch, most of this should feel familiar. If something breaks, congratulations: you have discovered a new feature.
+
+### Configure workers
+
 ```bash
 cp config.example.toml config.toml
 ```
-Edit `config.toml` to specify your worker profiles (1 to 3 background accounts; Account 1 is reserved for the interactive main agent).
 
-### 3. Run Doctor to Audit Isolation
-Verify path guards, environment filtering, and collision safety:
+Configure one to three worker profiles in `config.toml`. The main agent gets its own account; the workers get theirs.
+
+Yes, you actually need separate accounts. No, spawning three terminal windows does not magically give you three independent agents.
+
+### Doctor, doctor
+
 ```bash
 python3 -m multigravity.cli doctor
 ```
 
-### 4. Interactive Sequential Login Wizard
-Run the unified CLI without arguments to walk through logging in unverified accounts one at a time:
+Checks isolation, path guards, environment filtering, and other things that would be significantly less fun to debug after something goes wrong.
+
+Run it before blaming the kernel.
+
+### Log in
+
 ```bash
+# Interactive login wizard
 python3 -m multigravity.cli
-```
-Or log in / re-authenticate a single worker profile:
-```bash
+
+# Or authenticate a specific worker
 python3 -m multigravity.cli login worker-1
 ```
-- **Login Isolation**: Each worker runs inside a dedicated private D-Bus session with an isolated keyring (`$XDG_DATA_HOME/keyrings/login.keyring`, mode `0700`).
-- **OAuth URL Interception**: The browser helper displays the login URL prominently and warns you to sign in with the worker's dedicated account (not Account 1).
-- **Duplicate Prevention**: If an account is already logged into another worker or the main account, the login is rejected and an isolated wipe/retry is offered.
 
-### 5. Check Status Board
-```bash
-python3 -m multigravity.cli status
-```
+Each worker gets an isolated session and keyring. Duplicate account logins are rejected.
 
-### 6. Stop Core Daemon
-```bash
-python3 -m multigravity.cli stop
-```
+Because sharing credentials between supposedly isolated workers would kind of defeat the entire point of isolating them.
 
-### 7. Register with Main Agent MCP Client
-Register the MCP shim with `agy`:
+### Connect MCP
+
 ```bash
 agy mcp add multigravity python3 -m multigravity.mcp_shim
 ```
 
----
+Or just use `mgy` and let it handle the usual startup routine.
 
-## Running Acceptance Tests
+## What does the main agent actually get?
 
-Run the full unit and integration test suite with a single command:
+Six tools. No unnecessarily elaborate dashboard.
+
+| Tool | Purpose |
+|---|---|
+| `submit_task` | Submit a task and get an ID immediately. |
+| `get_status` | Check whether the task is queued, running, or finished. |
+| `get_result` | Get the useful bits without the transcript-shaped context bomb. |
+| `wait` | Wait for completion, capped at 25 seconds. |
+| `cancel_task` | Cancel a task and terminate its worker process group. |
+| `list_workers` | Inspect worker health, cooldowns, and current state. |
+
+Worker results follow a strict schema, with a character limit and one automatic repair/compression pass when needed.
+
+The main agent gets the answer, not 40 KB of an agent talking to itself.
+
+Raw transcripts stay on disk for debugging. Your context window has suffered enough.
+
+For full parameter signatures, data types, and default values, see the [MCP Tool Surface Specification](docs/TECHNICAL_REFERENCE.md#5-mcp-tool-surface-detailed-specification).
+
+## Under the hood
+
+The daemon manages:
+
+- A FIFO task queue and worker state machines.
+- Worker cooldowns and rate-limit recovery.
+- A persistent journal for crash recovery.
+- Structured event logs.
+- Unix socket communication with restricted permissions.
+- Output validation and compression.
+
+The MCP shim is deliberately stateless. Killing it doesn't kill the daemon's jobs.
+
+If the daemon itself crashes, unfinished tasks are recovered from the journal on restart. Because `kill -9` is not a valid task scheduler.
+
+## Testing
+
 ```bash
 python3 -m unittest discover tests
 ```
 
-### Verified Acceptance Criteria
-1. **Parallel Execution**: 10 submitted tasks across 3 mock workers complete in parallel time (~0.4s vs. 1.0s serial).
-2. **429 Failover**: Injecting rate limits on a worker transparently re-queues the task on another worker; the main agent sees no provider errors, and the cooled-down worker re-enters rotation after cooldown.
-3. **Queue Deadline**: When all workers are in cooldown, tasks wait cleanly up to `queue_deadline_s` and fail with structured `NO_WORKER_AVAILABLE` without hanging.
-4. **Crash & Restart Resilience**:
-   - Killing the MCP shim mid-task does not interrupt running daemon tasks; a new shim retrieves the result.
-   - Killing the daemon mid-task recovers tasks from the journal on restart, marking `RUNNING` tasks as `QUEUED` (`attempt + 1`) and completing them with zero orphan processes.
-5. **Contract Enforcement**: Oversized or non-schema outputs are intercepted by the validator, undergo a repair pass, and never forward raw transcripts to the main agent.
-6. **Timeout Cap**: `wait` is hard-capped at 25 seconds to protect client timeouts.
+The acceptance tests cover:
 
----
+- Parallel execution across mock workers.
+- HTTP 429 handling and worker failover.
+- Queue deadlines when nobody is available.
+- Daemon and shim crashes.
+- Recovery of unfinished tasks.
+- Output contract enforcement.
+- MCP timeout protection.
+
+Mock workers are used where appropriate. A successful mock test is not proof that an external provider will behave perfectly in production. We live in a society.
+
+For acceptance benchmark metrics and criteria details, see [docs/TECHNICAL_REFERENCE.md](docs/TECHNICAL_REFERENCE.md#8-verified-acceptance-criteria--benchmark-metrics).
 
 ## Troubleshooting
 
-- **Worker State Shows `AUTH_EXPIRED`**:
-  The session for that account expired. Re-authenticate the profile using `./scripts/multigravity-auth <profile_path>`. The daemon will automatically resume assigning tasks to it once re-armed.
-- **Tasks Failing with `NO_WORKER_AVAILABLE`**:
-  All configured worker accounts are either in cooldown or all workers are disabled/expired. Check `list_workers` for cooldown timers and inspect `logs/events.jsonl`.
-- **Daemon Socket Connection Refused**:
-  Ensure `multigravity-daemon` is running. Check that `$XDG_RUNTIME_DIR/multigravity.sock` exists and has permissions `0600`.
+**`AUTH_EXPIRED`**
+
+Your worker needs to log in again.
+
+```bash
+./scripts/multigravity-auth <profile_path>
+```
+
+**`NO_WORKER_AVAILABLE`**
+
+All workers are disabled, unauthenticated, or cooling down. Check worker states and inspect `logs/events.jsonl`.
+
+Alternatively, all your agents have collectively decided to take a break. Check the logs before filing a bug against the laws of physics.
+
+**Daemon socket connection refused**
+
+```bash
+python3 -m multigravity.cli status
+```
+
+Check that the daemon is running and that `$XDG_RUNTIME_DIR/multigravity.sock` exists with permissions `0600`.
+
+If it doesn't, the daemon might be dead. Restarting the MCP client for the seventh time is unlikely to resurrect it.
+
+See [Troubleshooting & Recovery](docs/TECHNICAL_REFERENCE.md#9-technical-troubleshooting--recovery) for detailed failure modes.
+
+## Documentation
+
+- [Technical Reference Manual](docs/TECHNICAL_REFERENCE.md) — complete parameter signatures, JSON contract schemas, state machine definitions, and security isolation mechanics.
+- [Specification](docs/SPEC.md) — the foundational design specification and project boundaries.
+- [Login Runbook](docs/LOGIN_RUNBOOK.md) — operator runbook for worker profile onboarding and keyrings.
+- [Login Isolation Guide](docs/LOGIN_ISOLATION.md) — Linux desktop keyring & D-Bus isolation details.
+
+## Philosophy
+
+Why build one complicated system when you can build two simple processes and make them argue over a Unix socket?
+
+Why read the docs when you can delegate reading the docs?
+
+Why use one agent when you can introduce scheduling, concurrency, persistent state, crash recovery, and an entirely new class of bugs?
+
+Because **overengineering is just engineering with better marketing.**
+
+And because one agent wasn't enough.
+
+---
+
+*Built on Linux. Tested with mocks. Maintained with questionable amounts of caffeine.*
+
+*I use Arch, btw.*
+
+---
+
+## Author's note
+
+- OS: Arch Linux, btw.
+- Code: vibecoded.
+- Manual coding: none.
+- Number of AI agents involved in making AI agents work together: yes.
+- Number of layers of abstraction between me and the actual code: a concerning amount.
+
+If something breaks, it's probably a skill issue.
+
+Just not necessarily mine.
+
+*I use Arch, btw.*
