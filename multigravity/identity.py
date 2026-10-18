@@ -55,11 +55,12 @@ def save_main_identity(email: str, state_dir: Path | None = None) -> dict[str, A
     """
     clean_email = email.strip()
     if not EMAIL_REGEX.match(clean_email):
-        raise MainIdentityError(f"Invalid email address format: '{clean_email}'")
+        raise MainIdentityError("Invalid email address format")
 
     salt = secrets.token_hex(16)
     identity_hash = hash_identity(clean_email, salt)
     masked = mask_email(clean_email)
+    del clean_email
 
     metadata = {
         "salt": salt,

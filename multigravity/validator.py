@@ -162,10 +162,12 @@ class OutputContractValidator:
 
     @staticmethod
     def save_raw_transcript(task_id: str, transcript_dir: str | Path, raw_text: str) -> str:
-        """Stores raw output transcript on disk for auditing, returns path."""
+        """Stores raw output transcript on disk for auditing, redacting raw email addresses."""
         p = Path(transcript_dir)
         p.mkdir(parents=True, exist_ok=True, mode=0o700)
         file_path = p / f"task_{task_id}_raw.txt"
+        from multigravity.logging import redact_emails
+        redacted = redact_emails(raw_text)
         with open(file_path, "w", encoding="utf-8") as f:
-            f.write(raw_text)
+            f.write(redacted)
         return str(file_path)

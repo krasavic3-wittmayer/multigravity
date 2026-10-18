@@ -11,6 +11,7 @@ from typing import Any
 from multigravity.isolation import (
     EnvironmentAllowList,
     extract_email_from_token_payload,
+    mask_email,
 )
 
 
@@ -36,7 +37,7 @@ def probe_worker_status(
     """Probes a worker profile.
     
     Returns:
-        (state, detail_message, detected_email_or_None)
+        (state, detail_message, detected_masked_email_or_None)
     """
     profile_dir = Path(profile_dir).resolve()
     if not profile_dir.exists():
@@ -78,7 +79,10 @@ def probe_worker_status(
             sec_cmd = prefix + [secret_tool_bin, "lookup", "service", "gemini", "username", "antigravity"]
             sec_proc = subprocess.run(sec_cmd, env=env, capture_output=True, text=True, timeout=5)
             if sec_proc.returncode == 0 and sec_proc.stdout:
-                detected_email = extract_email_from_token_payload(sec_proc.stdout)
+                raw_email = extract_email_from_token_payload(sec_proc.stdout)
+                if raw_email:
+                    detected_email = mask_email(raw_email)
+                del raw_email
         except Exception:
             pass
 

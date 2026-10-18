@@ -205,7 +205,7 @@ class EnvironmentAllowList:
 
 
 def mask_email(email: str) -> str:
-    """Masks email address for logs and status board (e.g. j***e@example.com)."""
+    """Masks email address for logs and status board (e.g. us***r@example.com)."""
     if not email or "@" not in email:
         return "[UNKNOWN]"
     user, domain = email.split("@", 1)

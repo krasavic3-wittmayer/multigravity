@@ -36,7 +36,7 @@ Phase 6 Complete: Preflight, Real Keyring Smoke Verification, Leak Audit & Owner
   - `README.md`: Architecture diagrams, usage documentation, troubleshooting, and verification guide.
 - **Phase 5 Real Worker Login & Isolation**:
   - `docs/LOGIN_ISOLATION.md`: Documented empirical discoveries: `agy` uses D-Bus desktop keyring (`service=gemini`, `username=antigravity`), which creates silent cross-account overwrite collision unless isolated with private D-Bus sessions (`dbus-run-session`) and unlocked private `gnome-keyring-daemon` instances (`mode 0700`).
-  - `multigravity/isolation.py`: Strict `PathGuard` (refuses user HOME, parent dirs, `~/.gemini`, `~/.config`, overlapping worker paths), `EnvironmentAllowList` (whitelists `PATH`, `LANG`, `TERM`; strips all API keys/tokens), identity hashing with random salt, and masked email formatting (`kr***2@example.com`).
+  - `multigravity/isolation.py`: Strict `PathGuard` (refuses user HOME, parent dirs, `~/.gemini`, `~/.config`, overlapping worker paths), `EnvironmentAllowList` (whitelists `PATH`, `LANG`, `TERM`; strips all API keys/tokens), identity hashing with random salt, and masked email formatting (`ac***2@example.com`).
   - `scripts/multigravity-browser-helper`: Intercepts `xdg-open` browser calls, displays OAuth URL prominently in a banner, warns against auto-selecting Account 1, and attempts private/incognito browser launch.
   - `multigravity/probes.py`: Status probe (`OK`, `NOT_LOGGED_IN`, `AUTH_EXPIRED`, `RATE_LIMITED`, `UNKNOWN`) and automatic identity extraction from private keyring without reading credential tokens.
   - `multigravity/wizard.py`: Sequential interactive login wizard with PID lock file (`multigravity_wizard.lock`), duplicate account collision prevention (cross-worker and Account 1 check), and clean `SIGINT` process group cleanup.
@@ -79,11 +79,20 @@ Phase 6 Complete: Preflight, Real Keyring Smoke Verification, Leak Audit & Owner
   - End-to-end real task verification: Started daemon and executed real tasks on both `worker-1` (`Account 2`, 13.7s, confidence 1.0) and `worker-2` (`Account 3`, 15.7s, confidence 1.0) with prompt `"five short bullets on how Unix domain sockets differ from TCP sockets"` (max 1200 chars). Both tasks passed contract validation without repair passes.
   - Clean shutdown & leak audit: Verified zero orphan processes, zero leftover scratch directories, and full test suite passing (54/54 tests).
 
+- **Phase 10 Email Scrub, Redaction Layer, History Rewrite & Leak Prevention**:
+  - Full inventory audit: Scanned tracked files, untracked/ignored files, local and origin commits, and `~/.multigravity` text files. Origin commits confirmed clean.
+  - Working tree scrubbed: Replaced all real/dummy email occurrences in tracked files and tests with `@example.com` / `@example.org` allow-listed domains.
+  - Environment logs redacted: Redacted 59 `agy` log files in place under `~/.multigravity/workers/` to masked format (`kr***3@outlook.com`, `mi***7@outlook.com`); keyrings and identity hash stores untouched.
+  - Local history rewritten: Created backup branch `backup/pre-email-scrub`; cleanly rewrote commits `origin/main..HEAD` via tree filter, stripping all leaked addresses while preserving logical changes, authors, and timestamps.
+  - Redaction layer implemented: Added `redact_emails` regex layer to `StructuredLogger` (sanitizing event types, details, messages, keys, and exceptions) and `OutputContractValidator.save_raw_transcript`.
+  - Identity and probe code hardened: `probe_worker_status` and `WorkerProfileManager` return only masked identities and salted hashes, destroying raw strings in memory immediately.
+  - Regression tests added: `tests/test_email_leak.py` added covering log event redaction, exception redaction, transcript redaction, identity/probe masking, and repository-wide tracked file scanner. Full test suite passing (60/60 tests).
+
 ## Current Phase
-Phase 9 Complete: Real Worker Adapter Wired, Verified E2E, and Tested
+Phase 10 Complete: Email Scrub, Redaction Layer, History Rewrite & Leak Prevention
 
 ## Done
-- All bootstrap and Phases 0–9 complete.
+- All bootstrap and Phases 0–10 complete.
 
 ## In Progress
 - Completed. Awaiting owner instructions.
