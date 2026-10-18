@@ -88,14 +88,21 @@ Phase 6 Complete: Preflight, Real Keyring Smoke Verification, Leak Audit & Owner
   - Identity and probe code hardened: `probe_worker_status` and `WorkerProfileManager` return only masked identities and salted hashes, destroying raw strings in memory immediately.
   - Regression tests added: `tests/test_email_leak.py` added covering log event redaction, exception redaction, transcript redaction, identity/probe masking, and repository-wide tracked file scanner. Full test suite passing (60/60 tests).
 
+- **Phase 11 Main Agent Fleet Prompt, Subagent Delegation & `mgy` Launcher (`install.sh`)**:
+  - `multigravity/prompts.py`: Dynamic Main Agent prompt generator with live worker fleet awareness, delegation playbook, and explicit instructions to propose worker subagents (`invoke_subagent`) for large/exploratory tasks.
+  - `multigravity/launcher.py`: Self-healing preflight runner, stale lock/socket cleaner, profile permission fixer (`0700`), worker authentication checker, and MCP `instructions.md` synchronizer.
+  - `scripts/mgy`: Unified bash launcher supporting interactive `agy` launch with fleet prompt, custom user prompts, and pass-through subcommands (`mgy status`, `mgy doctor`, `mgy login`, `mgy stop`).
+  - `install.sh`: One-step setup script checking system dependencies, registering `multigravity` MCP in `agy`, writing instructions, symlinking `mgy` to `~/.local/bin/mgy`, and setting shell aliases in `~/.bashrc` / `~/.zshrc`.
+  - `tests/test_launcher.py`: Unit tests covering prompt generation, subagent instructions, and auto-healing. Full test suite passing (64/64 tests).
+
 ## Current Phase
-Phase 10 Complete: Email Scrub, Redaction Layer, History Rewrite & Leak Prevention
+Phase 11 Complete: Main Agent Fleet Prompt, Subagent Delegation & `mgy` Launcher
 
 ## Done
-- All bootstrap and Phases 0–10 complete.
+- All bootstrap and Phases 0–11 complete.
 
 ## In Progress
 - Completed. Awaiting owner instructions.
 
 ## Next
-- Main agent submitting real tasks via MCP to background worker accounts.
+- Owner running `mgy` or submitting real tasks via MCP to background workers.

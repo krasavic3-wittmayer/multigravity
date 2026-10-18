@@ -75,6 +75,30 @@ The main agent interacts with `multigravity` via 6 fast tools (all return < 1s):
 
 ---
 
+## Quick Start with `mgy` & `install.sh`
+
+The fastest way to install and operate Multigravity is via `install.sh` and the `mgy` unified launcher:
+
+```bash
+# 1. Run the one-step installer
+./install.sh
+
+# 2. Launch the interactive Main Agent with fleet orchestration & subagent awareness
+mgy
+
+# Or launch with an initial task prompt:
+mgy "analyze the dependencies in this project"
+
+# Monitor, diagnose, or stop:
+mgy status
+mgy doctor
+mgy stop
+```
+
+`mgy` automatically performs self-healing preflight, verifies worker logins, ensures the core background daemon is running, and injects the Main Agent with the active fleet prompt and subagent delegation instructions.
+
+---
+
 ## Setup & Running
 
 ### 1. Requirements

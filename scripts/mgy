@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_SOURCE="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+export PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}"
+export MULTIGRAVITY_CONFIG="${MULTIGRAVITY_CONFIG:-$REPO_ROOT/config.local.toml}"
+
+# Check for help flags
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    cat << 'EOF'
+mgy - Multigravity Launcher & Orchestrator
+
+Usage:
+  mgy                  Launch interactive agy with Multigravity fleet prompt
+  mgy "user prompt"    Launch agy with initial prompt and fleet instructions
+  mgy [agy options]    Pass options directly to agy (e.g. -c to continue, --mode plan)
+  mgy status           Check current worker status board
+  mgy doctor           Run system diagnostics and collision verification
+  mgy login [worker]   Log in worker accounts interactively
+  mgy stop             Stop background core daemon
+
+EOF
+    exit 0
+fi
+
+# Subcommands routing
+case "${1:-}" in
+    status)
+        exec python3 -m multigravity.cli status "${@:2}"
+        ;;
+    doctor)
+        exec python3 -m multigravity.cli doctor "${@:2}"
+        ;;
+    login)
+        exec python3 -m multigravity.cli login "${@:2}"
+        ;;
+    stop)
+        exec python3 -m multigravity.cli stop "${@:2}"
+        ;;
+esac
+
+# 1. Run launcher preflight, auto-healing, and prompt generation
+PROMPT_OUTPUT=$(python3 -m multigravity.launcher)
+EXIT_CODE=$?
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "[!] Multigravity preflight failed. Please resolve above errors." >&2
+    exit $EXIT_CODE
+fi
+
+AGY_BIN="${AGY_BIN:-/usr/sbin/agy}"
+if [ ! -x "$AGY_BIN" ]; then
+    AGY_BIN="$(which agy 2>/dev/null || true)"
+fi
+
+if [ -z "$AGY_BIN" ] || [ ! -x "$AGY_BIN" ]; then
+    echo "[!] agy binary not found. Please ensure Antigravity CLI is installed." >&2
+    exit 1
+fi
+
+# 2. Launch interactive agy with prompt
+if [ $# -eq 0 ]; then
+    # No arguments: launch with fleet orchestration prompt
+    exec "$AGY_BIN" -i "$PROMPT_OUTPUT"
+elif [[ "${1:-}" == -* ]]; then
+    # User passed flags (e.g. -c, --mode plan)
+    exec "$AGY_BIN" "$@"
+else
+    # User passed a text prompt: combine fleet prompt with user prompt
+    USER_PROMPT="$1"
+    shift
+    exec "$AGY_BIN" -i "$PROMPT_OUTPUT
+
+---
+User Request:
+$USER_PROMPT" "$@"
+fi
