@@ -42,6 +42,23 @@ worker_profiles/
 profiles/
 .profiles/
 *.profile/
+workers/
+.workers/
+
+# Keyrings and credential stores
+*.keyring
+*.keystore
+
+# State and identity directory
+state/
+.state/
+*.state
+*.salt
+salt.txt
+
+# Process and lock files
+*.lock
+*.pid
 
 # Journal and log directories
 journals/
@@ -58,3 +75,4 @@ local_config.toml
 
 # Git worktrees
 .worktrees/
+
