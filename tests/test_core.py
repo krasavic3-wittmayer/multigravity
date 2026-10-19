@@ -68,14 +68,14 @@ default_max_output_chars = 3000
 [[workers]]
 id = "worker-1"
 label = "Worker One"
-profile_dir = "/tmp/w1"
+profile_dir = "~/.multigravity/workers/w1"
 enabled = true
 concurrency = 1
 
 [[workers]]
 id = "worker-2"
 label = "Worker Two"
-profile_dir = "/tmp/w2"
+profile_dir = "~/.multigravity/workers/w2"
 enabled = false
 """
         cfg = SystemConfig.from_toml_string(toml_content)
@@ -84,6 +84,8 @@ enabled = false
         self.assertEqual(cfg.max_attempts, 4)
         self.assertEqual(len(cfg.workers), 2)
         self.assertEqual(cfg.workers[0].label, "Worker One")
+        self.assertEqual(cfg.workers[0].profile_dir, "~/.multigravity/workers/w1")
+        self.assertTrue(cfg.workers[0].resolved_profile_dir.is_absolute())
         self.assertFalse(cfg.workers[1].enabled)
 
     def test_config_boundary_violation(self):
@@ -92,16 +94,16 @@ enabled = false
 [daemon]
 [[workers]]
 id = "w1"
-profile_dir = "/tmp/1"
+profile_dir = "profiles/1"
 [[workers]]
 id = "w2"
-profile_dir = "/tmp/2"
+profile_dir = "profiles/2"
 [[workers]]
 id = "w3"
-profile_dir = "/tmp/3"
+profile_dir = "profiles/3"
 [[workers]]
 id = "w4"
-profile_dir = "/tmp/4"
+profile_dir = "profiles/4"
 """
         with self.assertRaises(ValueError):
             SystemConfig.from_toml_string(toml_content)
@@ -231,8 +233,8 @@ class TestJournal(unittest.TestCase):
 class TestWorkers(unittest.TestCase):
     def test_worker_lru_and_cooldown(self):
         cfg = [
-            WorkerConfig(id="w1", label="Worker 1", profile_dir="/tmp/w1"),
-            WorkerConfig(id="w2", label="Worker 2", profile_dir="/tmp/w2"),
+            WorkerConfig(id="w1", label="Worker 1", profile_dir="~/.multigravity/workers/w1"),
+            WorkerConfig(id="w2", label="Worker 2", profile_dir="~/.multigravity/workers/w2"),
         ]
         reg = WorkerRegistry(cfg)
 

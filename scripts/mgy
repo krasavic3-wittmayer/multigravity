@@ -6,7 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 export PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}"
-export MULTIGRAVITY_CONFIG="${MULTIGRAVITY_CONFIG:-$REPO_ROOT/config.local.toml}"
+REPO_CONFIG="${REPO_ROOT/#$HOME/\~}/config.local.toml"
+export MULTIGRAVITY_CONFIG="${MULTIGRAVITY_CONFIG:-$REPO_CONFIG}"
 
 # Check for help flags
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then

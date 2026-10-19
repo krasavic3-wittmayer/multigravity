@@ -49,7 +49,8 @@ class AgyCliWorkerAdapter(WorkerAdapter):
                 error_message=f"agy binary not found at {self.agy_binary}",
             )
 
-        p_dir = Path(profile_dir or f"profiles/{worker_id}").resolve()
+        from multigravity.isolation import resolve_path
+        p_dir = resolve_path(profile_dir or f"profiles/{worker_id}")
         runtime_dir = p_dir / "runtime"
         runtime_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 

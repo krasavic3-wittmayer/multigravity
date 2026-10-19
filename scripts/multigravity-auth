@@ -8,7 +8,7 @@ if [ $# -lt 1 ]; then
     exit 1
 fi
 
-TARGET="$1"
+TARGET="${1/#\~/$HOME}"
 if [ ! -d "$TARGET" ]; then
     # Try relative to default profiles directory
     if [ -d "profiles/$TARGET" ]; then
@@ -16,7 +16,7 @@ if [ ! -d "$TARGET" ]; then
     elif [ -d "$HOME/.multigravity/workers/$TARGET" ]; then
         TARGET="$HOME/.multigravity/workers/$TARGET"
     else
-        echo "Creating worker profile directory at: $TARGET"
+        echo "Creating worker profile directory at: ${TARGET/#$HOME/\~}"
         mkdir -p "$TARGET"/{home,config,data,cache,state,runtime}
         chmod -R 0700 "$TARGET"
     fi
@@ -27,7 +27,7 @@ mkdir -p "$TARGET_DIR"/{home,config,data,cache,state,runtime}
 chmod -R 0700 "$TARGET_DIR"
 
 echo "=== Launching interactive authentication for worker profile ==="
-echo "Profile directory: $TARGET_DIR"
+echo "Profile directory: ${TARGET_DIR/#$HOME/\~}"
 echo "Follow the on-screen prompts. Once authenticated, exit with /quit or Ctrl+D Ctrl+D."
 echo "================================================================"
 

@@ -11,8 +11,10 @@ from multigravity.isolation import (
     PathGuardError,
     WorkerProfileManager,
     extract_email_from_token_payload,
+    format_display_path,
     hash_identity,
     mask_email,
+    resolve_path,
 )
 
 
@@ -61,6 +63,24 @@ class TestPathGuard(unittest.TestCase):
         w3 = Path(self.tmp.name) / "workers" / "worker-3"
         validated = PathGuard.validate_worker_profiles([w1, w2, w3], real_home=self.fake_home)
         self.assertEqual(len(validated), 3)
+
+    def test_accept_tilde_relative_paths(self):
+        p1 = "~/.multigravity/workers/worker-1"
+        p2 = "~/.multigravity/workers/worker-2"
+        validated = PathGuard.validate_worker_profiles([p1, p2], real_home=self.fake_home)
+        self.assertEqual(len(validated), 2)
+        self.assertEqual(validated[0], (self.fake_home / ".multigravity" / "workers" / "worker-1").resolve())
+        self.assertEqual(validated[1], (self.fake_home / ".multigravity" / "workers" / "worker-2").resolve())
+
+    def test_resolve_path_and_format_display_path(self):
+        # Resolve path with fake home
+        res = resolve_path("~/.multigravity/workers/worker-1", home=self.fake_home)
+        self.assertEqual(res, (self.fake_home / ".multigravity" / "workers" / "worker-1").resolve())
+
+        # format_display_path inside home
+        under_home = Path.home() / ".multigravity" / "config.toml"
+        disp = format_display_path(under_home)
+        self.assertEqual(disp, "~/.multigravity/config.toml")
 
 
 class TestEnvironmentAllowList(unittest.TestCase):

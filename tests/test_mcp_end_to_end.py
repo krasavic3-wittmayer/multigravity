@@ -24,8 +24,8 @@ class TestMcpEndToEnd(unittest.IsolatedAsyncioTestCase):
         self.journal_dir = Path(self.tmp_dir.name) / "journals"
 
         self.workers_cfg = [
-            WorkerConfig(id="worker-1", label="SubAgent 1", profile_dir="/tmp/w1"),
-            WorkerConfig(id="worker-2", label="SubAgent 2", profile_dir="/tmp/w2"),
+            WorkerConfig(id="worker-1", label="SubAgent 1", profile_dir="~/.multigravity/workers/w1"),
+            WorkerConfig(id="worker-2", label="SubAgent 2", profile_dir="~/.multigravity/workers/w2"),
         ]
 
         self.config = SystemConfig(

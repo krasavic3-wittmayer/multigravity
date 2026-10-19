@@ -30,7 +30,7 @@ def get_isolated_runner_prefix(runtime_dir: Path) -> list[str]:
 
 
 def probe_worker_status(
-    profile_dir: Path,
+    profile_dir: str | Path,
     agy_binary: str | None = None,
     timeout_s: float = 15.0,
 ) -> tuple[str, str, str | None]:
@@ -39,7 +39,8 @@ def probe_worker_status(
     Returns:
         (state, detail_message, detected_masked_email_or_None)
     """
-    profile_dir = Path(profile_dir).resolve()
+    from multigravity.isolation import resolve_path
+    profile_dir = resolve_path(profile_dir)
     if not profile_dir.exists():
         return "NOT_LOGGED_IN", f"Profile directory {profile_dir} does not exist", None
 

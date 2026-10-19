@@ -24,22 +24,28 @@ def resolve_config_path(config_arg: str | None = None) -> Path:
     
     Fails if no local config is found, never falling back to config.example.toml.
     """
+    from multigravity.isolation import resolve_path
+
     if config_arg:
-        p = Path(config_arg)
+        p = resolve_path(config_arg)
         if not p.exists():
             raise FileNotFoundError(f"Configuration file specified by --config not found: {p}")
-        return p.resolve()
+        return p
 
     env_config = os.environ.get("MULTIGRAVITY_CONFIG")
     if env_config:
-        p = Path(env_config)
+        p = resolve_path(env_config)
         if not p.exists():
             raise FileNotFoundError(f"Configuration file specified by MULTIGRAVITY_CONFIG not found: {p}")
-        return p.resolve()
+        return p
 
     local_path = Path("config.local.toml")
     if local_path.exists():
         return local_path.resolve()
+
+    user_config = resolve_path("~/.multigravity/config.toml")
+    if user_config.exists():
+        return user_config
 
     raise FileNotFoundError(
         "No configuration file found. Please create 'config.local.toml' (e.g. by copying config.example.toml):\n"
@@ -90,7 +96,8 @@ def cmd_doctor(config: SystemConfig, config_path: Path) -> int:
 
 
 def cmd_set_main_identity(config: SystemConfig, config_path: Path) -> int:
-    print(f"Using configuration: {config_path}")
+    from multigravity.isolation import format_display_path
+    print(f"Using configuration: {format_display_path(config_path)}")
     print("=== Multigravity: Register Main Account (Account 1) Identity ===")
     print("Enter the Google email address for your interactive Main Account (Account 1).")
     print("NOTE: The email itself is NEVER saved, logged, or sent anywhere.")
@@ -113,6 +120,7 @@ def cmd_set_main_identity(config: SystemConfig, config_path: Path) -> int:
 
 
 def cmd_login(config: SystemConfig, config_path: Path, worker_id: str) -> int:
+    from multigravity.isolation import format_display_path
     worker = next((w for w in config.workers if w.id == worker_id), None)
     if not worker:
         worker_displays = [format_worker_display(w.id, w.label) for w in config.workers]
@@ -120,8 +128,8 @@ def cmd_login(config: SystemConfig, config_path: Path, worker_id: str) -> int:
         return 1
 
     if not worker.enabled:
-        print(f"Error: Worker '{worker_id}' is disabled in configuration ({config_path}).")
-        print(f"To log in this worker, set 'enabled = true' in {config_path}.")
+        print(f"Error: Worker '{worker_id}' is disabled in configuration ({format_display_path(config_path)}).")
+        print(f"To log in this worker, set 'enabled = true' in {format_display_path(config_path)}.")
         return 1
 
     try:
@@ -144,11 +152,12 @@ def cmd_stop(config: SystemConfig, timeout_s: float = 4.0) -> int:
 def cmd_default_flow(config: SystemConfig, config_path: Path) -> int:
     """Preflight -> Login Wizard for unverified workers -> Start daemon -> Status board."""
     try:
+        from multigravity.isolation import format_display_path
         wizard = LoginWizard(config=config, config_path=config_path)
 
         # 1. Preflight & Wizard
         print("=== Multigravity Setup & Launch ===")
-        print(f"Configuration: {config_path}")
+        print(f"Configuration: {format_display_path(config_path)}")
         wizard_ok = wizard.run_wizard()
         if not wizard_ok:
             print("[!] Login wizard did not complete. Exiting.")
@@ -157,9 +166,9 @@ def cmd_default_flow(config: SystemConfig, config_path: Path) -> int:
         # 2. Start Daemon or verify running
         daemon_running = asyncio.run(is_daemon_running(config.socket_path))
         if daemon_running:
-            print(f"[✓] Core daemon is already running at {config.socket_path}.")
+            print(f"[✓] Core daemon is already running at {format_display_path(config.socket_path)}.")
         else:
-            print(f"Starting core daemon in background on {config.socket_path}...")
+            print(f"Starting core daemon in background on {format_display_path(config.socket_path)}...")
             pid_file = get_daemon_pid_path()
             proc = subprocess.Popen(
                 [sys.executable, "-m", "multigravity.daemon", str(config_path)],

@@ -22,9 +22,9 @@ class TestLauncherAndFleetPrompt(unittest.TestCase):
     def test_fleet_prompt_contains_subagent_instructions_and_worker_fleet(self):
         config = SystemConfig(
             workers=[
-                WorkerConfig(id="worker-1", label="Account 2", profile_dir="/tmp/w1", enabled=True),
-                WorkerConfig(id="worker-2", label="Account 3", profile_dir="/tmp/w2", enabled=True),
-                WorkerConfig(id="worker-3", label="Account 4", profile_dir="/tmp/w3", enabled=False),
+                WorkerConfig(id="worker-1", label="Account 2", profile_dir="~/.multigravity/workers/w1", enabled=True),
+                WorkerConfig(id="worker-2", label="Account 3", profile_dir="~/.multigravity/workers/w2", enabled=True),
+                WorkerConfig(id="worker-3", label="Account 4", profile_dir="~/.multigravity/workers/w3", enabled=False),
             ],
             adapter="agy_cli",
         )

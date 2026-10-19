@@ -132,7 +132,7 @@ class Doctor:
     def check_profile_permissions(self) -> DoctorCheckResult:
         issues = []
         for w in self.config.enabled_workers:
-            p = Path(w.profile_dir).resolve()
+            p = w.resolved_profile_dir
             if p.exists():
                 mode = p.stat().st_mode & 0o777
                 if mode != 0o700:
@@ -188,8 +188,8 @@ class Doctor:
 
         w_a = workers[0]
         w_b = workers[1]
-        p_a = Path(w_a.profile_dir).resolve()
-        p_b = Path(w_b.profile_dir).resolve()
+        p_a = w_a.resolved_profile_dir
+        p_b = w_b.resolved_profile_dir
 
         # Snapshot real home sensitive paths
         real_home = Path.home()
@@ -271,8 +271,8 @@ class Doctor:
         # Real test on the first two verified workers
         w_a = verified[0]
         w_b = verified[1]
-        p_a = Path(w_a.profile_dir).resolve()
-        p_b = Path(w_b.profile_dir).resolve()
+        p_a = w_a.resolved_profile_dir
+        p_b = w_b.resolved_profile_dir
 
         mgr_a = WorkerProfileManager(p_a)
         mgr_b = WorkerProfileManager(p_b)
@@ -381,10 +381,11 @@ class Doctor:
         ]
 
     def print_report(self) -> bool:
+        from multigravity.isolation import format_display_path
         print("\n" + "=" * 78)
         print("                        MULTIGRAVITY DOCTOR REPORT")
         if self.config_path:
-            print(f" Config: {self.config_path}")
+            print(f" Config: {format_display_path(self.config_path)}")
         print("=" * 78)
         print(f" {'STATUS':<7} {'TYPE':<12} {'CHECK':<25} : {'DETAILS'}")
         print("-" * 78)

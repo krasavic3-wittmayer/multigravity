@@ -19,8 +19,12 @@ import sys
 from pathlib import Path
 
 
-def check_worker_profile(profile_dir: Path, timeout_s: int = 15) -> dict:
-    profile_dir = profile_dir.resolve()
+def check_worker_profile(profile_dir: str | Path, timeout_s: int = 15) -> dict:
+    p_str = str(profile_dir)
+    if p_str.startswith("~/"):
+        profile_dir = (Path.home() / p_str[2:]).resolve()
+    else:
+        profile_dir = Path(os.path.expanduser(os.path.expandvars(p_str))).resolve()
     if not profile_dir.exists():
         return {"status": "ERROR", "message": f"Profile dir {profile_dir} does not exist"}
 

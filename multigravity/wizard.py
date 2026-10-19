@@ -147,7 +147,7 @@ class LoginWizard:
             meta = mgr.load_metadata()
 
             state, detail, detected_email = probe_worker_status(
-                Path(w.profile_dir),
+                w.resolved_profile_dir,
                 agy_binary=self.agy_binary,
                 timeout_s=5.0,
             )
@@ -170,12 +170,13 @@ class LoginWizard:
         return board
 
     def print_status_board(self):
+        from multigravity.isolation import format_display_path
         board = self.get_status_board()
         print("\n" + "=" * 78)
         print("                        MULTIGRAVITY WORKER STATUS")
         if self.config_path:
             adapter_str = f" (adapter: {self.config.adapter})"
-            print(f" Config: {self.config_path}{adapter_str}")
+            print(f" Config: {format_display_path(self.config_path)}{adapter_str}")
             if self.config.adapter == "fake":
                 print(" [WARNING: FAKE WORKER ADAPTER ACTIVE - NOT REAL ACCOUNTS]")
         print("=" * 78)
@@ -224,7 +225,8 @@ class LoginWizard:
         try:
             print("\nStarting Multigravity Login Wizard...")
             if self.config_path:
-                print(f"Config: {self.config_path}")
+                from multigravity.isolation import format_display_path
+                print(f"Config: {format_display_path(self.config_path)}")
             self.print_status_board()
 
             workers_to_login = []
@@ -235,7 +237,7 @@ class LoginWizard:
                     continue
                 mgr = WorkerProfileManager(w.profile_dir)
                 meta = mgr.load_metadata()
-                probe_state, _, _ = probe_worker_status(Path(w.profile_dir), agy_binary=self.agy_binary, timeout_s=5.0)
+                probe_state, _, _ = probe_worker_status(w.resolved_profile_dir, agy_binary=self.agy_binary, timeout_s=5.0)
                 if probe_state == "OK" and meta.get("state") == "OK" and not target_worker_id:
                     print(f"✓ Worker {format_worker_display(w.id, w.label)} is already authenticated ({meta.get('masked_identity')}). Skipping.")
                     continue
@@ -291,8 +293,8 @@ class LoginWizard:
         if browser_helper.exists():
             extra_vars["BROWSER"] = str(browser_helper.resolve())
 
-        env = EnvironmentAllowList.build_worker_env(Path(worker.profile_dir), extra_vars=extra_vars)
-        runtime_dir = Path(worker.profile_dir) / "runtime"
+        env = EnvironmentAllowList.build_worker_env(worker.resolved_profile_dir, extra_vars=extra_vars)
+        runtime_dir = worker.resolved_profile_dir / "runtime"
         prefix = get_isolated_runner_prefix(runtime_dir)
 
         # Run agy in interactive login mode
@@ -320,7 +322,7 @@ class LoginWizard:
             child_proc = subprocess.Popen(
                 cmd,
                 env=env,
-                cwd=str(Path(worker.profile_dir) / "home"),
+                cwd=str(worker.resolved_profile_dir / "home"),
                 preexec_fn=os.setsid,
             )
             child_proc.wait()
@@ -329,7 +331,7 @@ class LoginWizard:
 
         print("\nVerifying worker authentication...")
         state, detail, detected_email = probe_worker_status(
-            Path(worker.profile_dir),
+            worker.resolved_profile_dir,
             agy_binary=self.agy_binary,
             timeout_s=15.0,
         )

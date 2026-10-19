@@ -77,7 +77,7 @@ def auto_heal_stale_processes(config: SystemConfig):
 def fix_profile_permissions(config: SystemConfig):
     """Ensures worker profile directories are set to mode 0700."""
     for w in config.workers:
-        p = Path(w.profile_dir)
+        p = w.resolved_profile_dir
         if p.exists():
             try:
                 os.chmod(p, 0o700)
@@ -93,7 +93,7 @@ def ensure_workers_authenticated(config: SystemConfig, config_path: Path) -> boo
     """Checks worker authentication states and prompts user to log in if needed."""
     enabled_workers = [w for w in config.workers if w.enabled]
     for w in enabled_workers:
-        state, detail, _ = probe_worker_status(Path(w.profile_dir), timeout_s=5.0)
+        state, detail, _ = probe_worker_status(w.resolved_profile_dir, timeout_s=5.0)
         if state not in ("OK", "RATE_LIMITED"):
             print("\n" + "=" * 70)
             print(f"[!] Worker {format_worker_display(w.id, w.label)} requires authentication ({state}: {detail}).")

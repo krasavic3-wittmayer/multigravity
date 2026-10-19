@@ -21,9 +21,9 @@ class TestDispatcher(unittest.IsolatedAsyncioTestCase):
         self.journal_dir = Path(self.tmp_dir.name) / "journals"
 
         self.workers_cfg = [
-            WorkerConfig(id="worker-1", label="Worker 1", profile_dir="/tmp/w1"),
-            WorkerConfig(id="worker-2", label="Worker 2", profile_dir="/tmp/w2"),
-            WorkerConfig(id="worker-3", label="Worker 3", profile_dir="/tmp/w3"),
+            WorkerConfig(id="worker-1", label="Worker 1", profile_dir="~/.multigravity/workers/w1"),
+            WorkerConfig(id="worker-2", label="Worker 2", profile_dir="~/.multigravity/workers/w2"),
+            WorkerConfig(id="worker-3", label="Worker 3", profile_dir="~/.multigravity/workers/w3"),
         ]
 
         self.config = SystemConfig(

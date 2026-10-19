@@ -17,6 +17,36 @@ class PathGuardError(ValueError):
     pass
 
 
+def resolve_path(path: str | Path, home: Path | None = None) -> Path:
+    """Resolves path expanding user (~) and environment variables without requiring absolute input."""
+    p_str = str(path)
+    h = (home or Path.home()).resolve()
+    if p_str == "~":
+        return h
+    if p_str.startswith("~/"):
+        return (h / p_str[2:]).resolve()
+    expanded = os.path.expanduser(os.path.expandvars(p_str))
+    return Path(expanded).resolve()
+
+
+def format_display_path(path: str | Path) -> str:
+    """Formats path relative to CWD or user home (~), avoiding absolute paths in UI output."""
+    p = Path(path).resolve()
+    cwd = Path.cwd().resolve()
+    try:
+        rel = p.relative_to(cwd)
+        return str(rel)
+    except ValueError:
+        pass
+    home = Path.home().resolve()
+    try:
+        rel_home = p.relative_to(home)
+        return f"~/{rel_home}"
+    except ValueError:
+        pass
+    return str(p)
+
+
 class PathGuard:
     """Enforces strict path isolation boundaries for worker profile directories."""
 
@@ -25,36 +55,9 @@ class PathGuard:
         profile_paths: list[str | Path],
         real_home: str | Path | None = None,
     ) -> list[Path]:
-        """Validates a list of worker profile paths.
-        
-        Rules:
-        1. Resolve symlinks first.
-        2. Refuse any profile path that equals, contains, or sits inside the real HOME
-           (unless in an explicitly dedicated subpath like ~/.multigravity/workers/worker-N).
-           Wait: SPEC says: 'refuse any profile path that equals, contains, or sits inside
-           the real HOME or the default config locations of agy, and refuse two workers
-           sharing a path or a parent-child relation.'
-           Wait! If ~/.multigravity/workers/worker-N is inside real HOME, let's check:
-           Notice Section 4 says:
-           'One profile root per worker, for example ~/.multigravity/workers/worker-N, mode 0700...'
-           'refuse any profile path that equals, contains, or sits inside the real HOME or the default config locations of agy'
-           Wait! Does 'sits inside the real HOME' mean equals ~/. or sits inside default config locations?
-           Let's re-read carefully:
-           'One profile root per worker, for example ~/.multigravity/workers/worker-N, mode 0700...
-            Path guard: refuse any profile path that equals, contains, or sits inside the real HOME
-            or the default config locations of agy, and refuse two workers sharing a path or a parent-child relation.
-            Resolve symlinks first.'
-           Notice ~/.multigravity/workers/worker-N IS inside ~!
-           Wait, why would it say 'for example ~/.multigravity/workers/worker-N' AND 'refuse any profile path that equals, contains, or sits inside the real HOME or the default config locations of agy'?
-           What does 'equals, contains, or sits inside' mean in security terms?
-           It means:
-           - A profile path cannot BE ~ (profile_path == real_home).
-           - A profile path cannot CONTAIN ~ (profile_path is a parent of real_home, e.g. /home or /).
-           - A profile path cannot be the real HOME root itself, or standard user directories like ~/.config, ~/.local, ~/.cache, ~/.gemini, ~/Desktop, ~/Projects/multigravity, or default agy locations!
-           - And two workers cannot share a directory or have a parent-child relation!
-        """
         resolved_home = Path(real_home or Path.home()).resolve()
         resolved_paths: list[Path] = []
+        repo_root = Path(__file__).resolve().parent.parent
 
         # Standard sensitive user / agy directories that must never be a profile
         forbidden_locations = {
@@ -64,11 +67,11 @@ class PathGuard:
             (resolved_home / ".cache").resolve(),
             (resolved_home / ".gemini").resolve(),
             (resolved_home / ".ssh").resolve(),
-            (resolved_home / "Projects" / "multigravity").resolve(),
+            repo_root,
         }
 
         for p_input in profile_paths:
-            p = Path(p_input).resolve()
+            p = resolve_path(p_input, home=resolved_home)
 
             # Rule: Path cannot equal real home or any parent of real home
             if p == resolved_home:
@@ -171,12 +174,12 @@ class EnvironmentAllowList:
     @classmethod
     def build_worker_env(
         cls,
-        profile_root: Path,
+        profile_root: str | Path,
         parent_env: dict[str, str] | None = None,
         extra_vars: dict[str, str] | None = None,
     ) -> dict[str, str]:
         """Constructs an isolated execution environment pointing to worker directories."""
-        profile_root = profile_root.resolve()
+        profile_root = resolve_path(profile_root)
         home = profile_root / "home"
         config = profile_root / "config"
         data = profile_root / "data"
@@ -246,7 +249,7 @@ class WorkerProfileManager:
     """Manages worker profile filesystem layout, metadata, and identity hashes."""
 
     def __init__(self, profile_root: str | Path):
-        self.root = Path(profile_root).resolve()
+        self.root = resolve_path(profile_root)
         self.metadata_file = self.root / "profile_metadata.json"
 
     def ensure_structure(self):

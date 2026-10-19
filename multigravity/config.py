@@ -17,6 +17,11 @@ class WorkerConfig:
     enabled: bool = True
     concurrency: int = 1
 
+    @property
+    def resolved_profile_dir(self) -> Path:
+        from multigravity.isolation import resolve_path
+        return resolve_path(self.profile_dir)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
@@ -45,6 +50,21 @@ class SystemConfig:
     def enabled_workers(self) -> list[WorkerConfig]:
         return [w for w in self.workers if w.enabled]
 
+    @property
+    def resolved_socket_path(self) -> Path:
+        from multigravity.isolation import resolve_path
+        return resolve_path(self.socket_path)
+
+    @property
+    def resolved_log_dir(self) -> Path:
+        from multigravity.isolation import resolve_path
+        return resolve_path(self.log_dir)
+
+    @property
+    def resolved_journal_dir(self) -> Path:
+        from multigravity.isolation import resolve_path
+        return resolve_path(self.journal_dir)
+
     def __post_init__(self):
         if self.adapter not in ("agy_cli", "fake"):
             raise ValueError(
@@ -57,6 +77,9 @@ class SystemConfig:
                 self.socket_path = str(Path(xdg_runtime) / "multigravity.sock")
             else:
                 self.socket_path = str(Path("/tmp") / f"multigravity_{os.getuid()}.sock")
+        else:
+            from multigravity.isolation import resolve_path
+            self.socket_path = str(resolve_path(self.socket_path))
 
         # Boundary check: strictly 1-3 worker accounts (Accounts 2-4; Account 1 is main)
         if len(self.workers) > 3:

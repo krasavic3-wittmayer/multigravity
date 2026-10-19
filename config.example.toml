@@ -25,7 +25,7 @@ log_dir = "logs"
 journal_dir = "journals"
 
 # Unix domain socket path (defaults to $XDG_RUNTIME_DIR/multigravity.sock if empty)
-# socket_path = "/run/user/1000/multigravity.sock"
+# socket_path = "~/.multigravity/multigravity.sock"
 
 # Worker configurations (Strict boundary: 1 to 3 background accounts; Account 1 is main agent)
 # You can run with 1, 2, or 3 background workers.
@@ -41,20 +41,20 @@ journal_dir = "journals"
 [[workers]]
 id = "worker-1"
 label = "Account 2 (Research & Docs)"
-profile_dir = "/home/michal/.multigravity/workers/worker-1"
+profile_dir = "~/.multigravity/workers/worker-1"
 enabled = true
 concurrency = 1
 
 [[workers]]
 id = "worker-2"
 label = "Account 3 (Test Gen & Review)"
-profile_dir = "/home/michal/.multigravity/workers/worker-2"
+profile_dir = "~/.multigravity/workers/worker-2"
 enabled = true
 concurrency = 1
 
 [[workers]]
 id = "worker-3"
 label = "Account 4 (General Background)"
-profile_dir = "/home/michal/.multigravity/workers/worker-3"
+profile_dir = "~/.multigravity/workers/worker-3"
 enabled = false
 concurrency = 1
