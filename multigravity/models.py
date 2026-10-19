@@ -116,6 +116,7 @@ class Task:
     assigned_worker_id: str | None = None
     workers_tried: list[str] = field(default_factory=list)
     created_at: float = 0.0
+    enqueued_at: float | None = None
     assigned_at: float | None = None
     completed_at: float | None = None
     result: dict[str, Any] | None = None
@@ -137,6 +138,7 @@ class Task:
             "assigned_worker_id": self.assigned_worker_id,
             "workers_tried": list(self.workers_tried),
             "created_at": self.created_at,
+            "enqueued_at": self.enqueued_at,
             "assigned_at": self.assigned_at,
             "completed_at": self.completed_at,
             "result": self.result,
@@ -162,6 +164,7 @@ class Task:
             assigned_worker_id=d.get("assigned_worker_id"),
             workers_tried=list(d.get("workers_tried", [])),
             created_at=d.get("created_at", 0.0),
+            enqueued_at=d.get("enqueued_at"),
             assigned_at=d.get("assigned_at"),
             completed_at=d.get("completed_at"),
             result=d.get("result"),

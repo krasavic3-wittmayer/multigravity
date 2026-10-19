@@ -98,6 +98,7 @@ class Dispatcher:
         task_id = str(uuid.uuid4())
         max_chars = max_output_chars or self.config.default_max_output_chars
 
+        now = time.time()
         task = Task(
             task_id=task_id,
             kind=kind,
@@ -107,7 +108,8 @@ class Dispatcher:
             max_output_chars=max_chars,
             mode=mode,
             state=TaskState.QUEUED,
-            created_at=time.time(),
+            created_at=now,
+            enqueued_at=now,
         )
 
         self.journal.save_task(task)
@@ -227,7 +229,8 @@ class Dispatcher:
 
                 # Check queue deadline
                 now = time.time()
-                if (now - task.created_at) > self.config.queue_deadline_s:
+                queue_start = task.enqueued_at if task.enqueued_at is not None else task.created_at
+                if (now - queue_start) > self.config.queue_deadline_s:
                     task.state = TaskState.FAILED
                     task.completed_at = now
                     task.error = StructuredError(
@@ -242,6 +245,12 @@ class Dispatcher:
 
                 # Find available worker (excluding workers already failed on this attempt)
                 worker = self.registry.get_least_recently_used_idle(excluded_worker_ids=task.workers_tried)
+                if not worker and task.workers_tried:
+                    # If all idle workers were excluded but some are now IDLE (e.g. cooldown passed), allow retry
+                    worker = self.registry.get_least_recently_used_idle(excluded_worker_ids=[])
+                    if worker:
+                        task.workers_tried.clear()
+
                 if not worker:
                     # Check if all workers are permanently dead or disabled
                     if not self.registry.any_available_or_cooldown():
@@ -276,6 +285,7 @@ class Dispatcher:
         task.assigned_worker_id = worker_id
         task.worker_label = worker_label
         task.assigned_at = now
+        task.enqueued_at = None
         self.journal.save_task(task)
         self.registry.mark_busy(worker_id)
         self.logger.task_assigned(
@@ -455,6 +465,7 @@ class Dispatcher:
         task.state = TaskState.QUEUED
         task.assigned_worker_id = None
         task.worker_label = None
+        task.enqueued_at = time.time()
         self.journal.save_task(task)
         self.logger.task_retried(task.task_id, task.attempt, error_code, reason)
         self._queue.insert(0, task.task_id)

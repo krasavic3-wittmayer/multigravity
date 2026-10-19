@@ -31,8 +31,8 @@ class WorkerConfig:
 class SystemConfig:
     cooldown_base_s: float = 5.0
     cooldown_cap_s: float = 300.0
-    queue_deadline_s: float = 60.0
-    task_timeout_s: float = 120.0
+    queue_deadline_s: float = 300.0
+    task_timeout_s: float = 300.0
     max_attempts: int = 3
     default_max_output_chars: int = 4000
     adapter: str = "agy_cli"
@@ -85,8 +85,8 @@ class SystemConfig:
         return cls(
             cooldown_base_s=float(daemon_cfg.get("cooldown_base_s", 5.0)),
             cooldown_cap_s=float(daemon_cfg.get("cooldown_cap_s", 300.0)),
-            queue_deadline_s=float(daemon_cfg.get("queue_deadline_s", 60.0)),
-            task_timeout_s=float(daemon_cfg.get("task_timeout_s", 120.0)),
+            queue_deadline_s=float(daemon_cfg.get("queue_deadline_s", 300.0)),
+            task_timeout_s=float(daemon_cfg.get("task_timeout_s", 300.0)),
             max_attempts=int(daemon_cfg.get("max_attempts", 3)),
             default_max_output_chars=int(daemon_cfg.get("default_max_output_chars", 4000)),
             adapter=str(daemon_cfg.get("adapter", "agy_cli")),

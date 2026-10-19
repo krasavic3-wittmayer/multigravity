@@ -97,32 +97,6 @@ class AgyCliWorkerAdapter(WorkerAdapter):
             )
             stdout = stdout_bytes.decode("utf-8", errors="replace")
             stderr = stderr_bytes.decode("utf-8", errors="replace")
-            combined = (stdout + " " + stderr).lower()
-
-            # Check for Rate Limit signals
-            if "429" in combined or "resource_exhausted" in combined or "quota exceeded" in combined or "rate limit" in combined:
-                return WorkerResult(
-                    success=False,
-                    error_code=ErrorCode.RATE_LIMITED.value,
-                    error_message=f"Rate limit signal detected: {stderr.strip()[:200] or stdout.strip()[:200]}",
-                )
-
-            # Check for Auth / Session Expiry signals
-            auth_sigs = [
-                "oauth2: cannot fetch token",
-                "keyring error",
-                "could not find default credentials",
-                "unauthenticated",
-                "login required",
-                "authentication failed",
-                "you are not logged into antigravity",
-            ]
-            if any(sig in combined for sig in auth_sigs):
-                return WorkerResult(
-                    success=False,
-                    error_code=ErrorCode.AUTH_EXPIRED.value,
-                    error_message=f"Session expiry detected: {stderr.strip()[:200] or stdout.strip()[:200]}",
-                )
 
             if worker_id in self._cancelled_workers or proc.returncode in (-signal.SIGTERM, -signal.SIGKILL):
                 return WorkerResult(
@@ -131,33 +105,74 @@ class AgyCliWorkerAdapter(WorkerAdapter):
                     error_message="Worker process was terminated/cancelled",
                 )
 
-            if proc.returncode != 0:
+            # Unwrap JSON response envelope from agy if present
+            raw_output = stdout.strip()
+            data = None
+            try:
+                data = json.loads(raw_output)
+                if isinstance(data, dict):
+                    if "response" in data and isinstance(data["response"], str) and data["response"].strip():
+                        raw_output = data["response"].strip()
+                    elif data.get("status") == "ERROR":
+                        raw_output = None
+            except Exception:
+                pass
+
+            # If we don't have a valid raw_output, check errors on stderr or data["error"]
+            if not raw_output:
+                err_text = str(data.get("error", "")) if isinstance(data, dict) else ""
+                combined_err = (err_text + " " + stderr).lower()
+
+                # Check for Rate Limit signals
+                if "429" in combined_err or "resource_exhausted" in combined_err or "quota exceeded" in combined_err or "rate limit" in combined_err:
+                    return WorkerResult(
+                        success=False,
+                        error_code=ErrorCode.RATE_LIMITED.value,
+                        error_message=f"Rate limit signal detected: {err_text or stderr.strip()[:200]}",
+                    )
+
+                # Check for Auth / Session Expiry signals
+                auth_sigs = [
+                    "oauth2: cannot fetch token",
+                    "keyring error",
+                    "could not find default credentials",
+                    "unauthenticated",
+                    "login required",
+                    "authentication failed",
+                    "you are not logged into antigravity",
+                ]
+                if any(sig in combined_err for sig in auth_sigs):
+                    return WorkerResult(
+                        success=False,
+                        error_code=ErrorCode.AUTH_EXPIRED.value,
+                        error_message=f"Session expiry detected: {err_text or stderr.strip()[:200]}",
+                    )
+
+                if proc.returncode != 0:
+                    return WorkerResult(
+                        success=False,
+                        error_code=ErrorCode.TASK_FAILED.value,
+                        error_message=f"CLI exited with status {proc.returncode}: {stderr.strip()[:300]}",
+                    )
+
+                if isinstance(data, dict) and data.get("status") == "ERROR":
+                    return WorkerResult(
+                        success=False,
+                        error_code=ErrorCode.TASK_FAILED.value,
+                        error_message=str(data.get("error", "agy returned error status"))[:300],
+                    )
+
+
+            if proc.returncode != 0 and not raw_output:
                 return WorkerResult(
                     success=False,
                     error_code=ErrorCode.TASK_FAILED.value,
                     error_message=f"CLI exited with status {proc.returncode}: {stderr.strip()[:300]}",
                 )
 
-            # Unwrap JSON response envelope from agy if present
-            raw_output = stdout.strip()
-            try:
-                data = json.loads(raw_output)
-                if isinstance(data, dict):
-                    if data.get("status") == "ERROR":
-                        err_msg = data.get("error", "agy returned error status")
-                        return WorkerResult(
-                            success=False,
-                            error_code=ErrorCode.TASK_FAILED.value,
-                            error_message=str(err_msg)[:300],
-                        )
-                    if "response" in data and isinstance(data["response"], str):
-                        raw_output = data["response"].strip()
-            except Exception:
-                pass
-
             return WorkerResult(
                 success=True,
-                raw_output=raw_output,
+                raw_output=raw_output or "",
             )
 
         except asyncio.TimeoutError:
