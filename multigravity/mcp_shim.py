@@ -17,19 +17,19 @@ from multigravity.models import TaskKind, TaskMode
 MCP_TOOLS_SPEC = [
     {
         "name": "submit_task",
-        "description": "Submit a background task to idle worker sub-agents. Returns fast with a task_id.",
+        "description": "Submit a background task to the Multigravity worker fleet. Use proactively for research, code search, doc digestion, testing, or review to preserve Main Agent context and utilize dedicated worker quotas. Returns immediately with task_id.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "kind": {
                     "type": "string",
                     "enum": [k.value for k in TaskKind],
-                    "description": "Task type (research, doc_digest, test_gen, review, custom)",
+                    "description": "Task type: research (code search/architecture), doc_digest (summarize large docs/logs), test_gen (write/verify tests), review (code audit/diff review), or custom",
                     "default": "research",
                 },
                 "instruction": {
                     "type": "string",
-                    "description": "Clear instruction of what the sub-agent should do",
+                    "description": "Clear, detailed instruction of what the background worker should investigate or execute",
                 },
                 "inputs": {
                     "type": ["object", "string", "array"],
@@ -47,7 +47,7 @@ MCP_TOOLS_SPEC = [
                     "type": "string",
                     "enum": [m.value for m in TaskMode],
                     "default": "read_only",
-                    "description": "Execution mode: 'read_only' or 'worktree'",
+                    "description": "Execution mode: 'read_only' (safe disposable scratch space) or 'worktree'",
                 },
             },
             "required": ["instruction"],
@@ -70,7 +70,7 @@ MCP_TOOLS_SPEC = [
     },
     {
         "name": "get_result",
-        "description": "Retrieve the schema-bound, compressed result for a completed task.",
+        "description": "Retrieve the schema-bound, compressed result for a completed task containing summary, key_findings, interface_spec_or_diff, sources, confidence, and open_questions.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -84,7 +84,7 @@ MCP_TOOLS_SPEC = [
     },
     {
         "name": "wait",
-        "description": "Wait until any/all specified tasks complete or timeout expires (hard-capped at 25s).",
+        "description": "Wait until specified background task(s) complete or timeout expires (capped at 25s). Call immediately after submitting tasks to block until worker results are ready.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -118,7 +118,7 @@ MCP_TOOLS_SPEC = [
     },
     {
         "name": "list_workers",
-        "description": "List worker sub-agents and their operational health (IDLE, BUSY, COOLDOWN, AUTH_EXPIRED).",
+        "description": "List worker sub-agents and their operational health (IDLE, BUSY, COOLDOWN, AUTH_EXPIRED). Call to check fleet availability and capacity.",
         "inputSchema": {
             "type": "object",
             "properties": {},

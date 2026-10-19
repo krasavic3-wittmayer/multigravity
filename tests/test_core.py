@@ -153,6 +153,53 @@ Done."""
         self.assertFalse(is_valid)
         self.assertIn("Failed to parse valid JSON", err)
 
+    def test_wrap_prompt(self):
+        prompt = OutputContractValidator.wrap_prompt(
+            kind="research",
+            instruction="Find all database connection leaks",
+            inputs={"path": "src/db.py"},
+            max_output_chars=3500,
+        )
+        self.assertIn("Multigravity Background Specialist Worker", prompt)
+        self.assertIn("Operational Directives", prompt)
+        self.assertIn("Deep Technical Investigation", prompt)
+        self.assertIn("invoke_subagent", prompt)
+        self.assertIn("Context Funneling", prompt)
+        self.assertIn("Required JSON Schema", prompt)
+        self.assertIn('"summary"', prompt)
+        self.assertIn('"key_findings"', prompt)
+        self.assertIn('"interface_spec_or_diff"', prompt)
+        self.assertIn('"sources"', prompt)
+        self.assertIn('"confidence"', prompt)
+        self.assertIn('"open_questions"', prompt)
+        self.assertIn("CRITICAL BUDGET CONSTRAINT", prompt)
+        self.assertIn("3500 characters", prompt)
+        self.assertIn("Task Kind: research", prompt)
+        self.assertIn("Find all database connection leaks", prompt)
+        self.assertIn("src/db.py", prompt)
+
+        # Test with empty/None inputs
+        prompt_none = OutputContractValidator.wrap_prompt(
+            kind="test_gen",
+            instruction="Write unit tests",
+            inputs=None,
+            max_output_chars=2000,
+        )
+        self.assertIn("None provided.", prompt_none)
+
+    def test_build_repair_prompt(self):
+        repair = OutputContractValidator.build_repair_prompt(
+            previous_output="Invalid output that forgot the schema",
+            violation_reason="Missing key 'summary'",
+            max_output_chars=2500,
+        )
+        self.assertIn("emergency repair and compression pass", repair)
+        self.assertIn("Missing key 'summary'", repair)
+        self.assertIn("2500 characters", repair)
+        self.assertIn("Invalid output that forgot the schema", repair)
+        self.assertIn('"summary"', repair)
+        self.assertIn('"key_findings"', repair)
+
 
 class TestJournal(unittest.TestCase):
     def test_journal_recovery(self):

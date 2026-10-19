@@ -109,7 +109,10 @@ else
 
 ---
 User Request:
-$USER_PROMPT" "$@"
+$USER_PROMPT
+
+Direct Orchestration Mandate:
+Decompose this request immediately into parallel background tasks and dispatch them to the Multigravity worker fleet via submit_task. Do NOT attempt deep file search or heavy reading locally." "$@"
 fi
 
 

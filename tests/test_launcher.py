@@ -50,6 +50,16 @@ class TestLauncherAndFleetPrompt(unittest.TestCase):
         self.assertIn("get_result", prompt)
         self.assertIn("list_workers", prompt)
 
+        # Check aggressive delegation directives and playbook
+        self.assertIn("PRIMARY DIRECTIVE: DELEGATION-FIRST WORKFLOW (UTILIZE WORKERS AGGRESSIVELY)", prompt)
+        self.assertIn("Lead Orchestrator Mindset", prompt)
+        self.assertIn("Protect Your Primary Context Window", prompt)
+        self.assertIn("Default to Delegation", prompt)
+        self.assertIn("The 4-Step Orchestration Playbook", prompt)
+        self.assertIn("PARALLEL DISPATCH", prompt)
+        self.assertIn("When to Delegate to Workers (Delegation Matrix)", prompt)
+        self.assertIn("How to Craft High-Leverage Worker Instructions", prompt)
+
     def test_auto_heal_stale_daemon_pid(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)

@@ -105,12 +105,19 @@ Phase 11 Complete: Main Agent Fleet Prompt, Subagent Delegation & `mgy` Launcher
   - Enhanced `multigravity.cli stop` (`mgy stop`) to utilize full clean/hard kill escalation.
   - Added unit test suite in `tests/test_cleanup.py` (70/70 tests passing).
 
+- **Phase 13 Main Agent & Worker Initial Prompt Optimization**:
+  - `multigravity/prompts.py`: Overhauled Main Agent fleet prompt with explicit "PRIMARY DIRECTIVE: DELEGATION-FIRST WORKFLOW", mandating aggressive worker utilization, context window protection, and a structured 4-step orchestration playbook (Decompose -> Parallel Dispatch -> Wait & Harvest -> Synthesize & Lead).
+  - `multigravity/validator.py`: Upgraded `SYSTEM_CONTRACT_TEMPLATE` for background workers to establish an authoritative specialist persona, operational directives for deep code investigation using tools, explicit empowerment to spawn subagents (`invoke_subagent`), detailed field-by-field guidelines for the output contract schema, and hard character budget enforcement. Hardened `REPAIR_PROMPT_TEMPLATE` for rapid compression passes.
+  - `multigravity/mcp_shim.py`: Enhanced MCP tool descriptions (`submit_task`, `wait`, `get_result`, `list_workers`) to actively guide LLM orchestration and emphasize concurrent dispatch.
+  - `scripts/mgy`: Added direct orchestration mandate when user launches with initial prompt arguments to trigger immediate task decomposition and worker dispatch.
+  - `tests/`: Added unit tests for prompt generation, contract wrapping, repair prompts, and delegation directives in `tests/test_core.py` and `tests/test_launcher.py`. Full test suite passing (73/73 tests).
+
 ## Done
-- All bootstrap and Phases 0–12 complete.
+- All bootstrap and Phases 0–13 complete.
 
 ## In Progress
 - Completed. Awaiting owner instructions.
 
 ## Next
-- Owner running `mgy` or submitting real tasks via MCP to background workers.
+- Real task execution with enhanced prompts and aggressive delegation across worker accounts.
 
